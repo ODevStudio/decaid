@@ -7,6 +7,27 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <title>Decaid</title>
         <item>
             <title>0.8.6</title>
+            <pubDate>Mon, 14 Sep 2026 11:49:34 +0000</pubDate>
+            <sparkle:channel>beta</sparkle:channel>
+            <sparkle:version>2766</sparkle:version>
+            <sparkle:shortVersionString>0.8.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[## What's Changed
+* fix(firmware): poll for verify completion when the notification never arrives by @ChampionDesigns in https://github.com/decentespresso/decaid/pull/806
+* feat(scale): show connected Skale firmware revision by @MaxRink in https://github.com/decentespresso/decaid/pull/742
+* fix(scale): make Skale battery reporting nullable and refresh it by @MaxRink in https://github.com/decentespresso/decaid/pull/743
+* fix(steam): select the declared milk-temperature sensor by @MaxRink in https://github.com/decentespresso/decaid/pull/847
+
+## New Contributors
+* @MaxRink made their first contribution in https://github.com/decentespresso/decaid/pull/742
+
+**Full Changelog**: https://github.com/decentespresso/decaid/compare/v0.8.6-beta.2...v0.8.6-beta.3
+
+]]></description>
+            <enclosure url="https://github.com/decentespresso/decaid/releases/download/v0.8.6-beta.3/decaid-macos-0.8.6-beta.3.zip" length="64679180" type="application/octet-stream" sparkle:edSignature="CTqo5P7CLELBxr/qSaVuvwq4iNxvOl745qPUj4NZKn8DG5AAESCTZrh7n6FQyu0Ix+EeREqKVJKariNJeicBCA=="/>
+        </item>
+        <item>
+            <title>0.8.6</title>
             <pubDate>Thu, 10 Sep 2026 13:19:20 +0000</pubDate>
             <sparkle:channel>beta</sparkle:channel>
             <sparkle:version>2734</sparkle:version>
@@ -377,6 +398,6 @@ See `doc/RELEASE.md` for install and verification instructions.
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: WgPciSAYoDE6+Pp6ST3sbDqp+igYT1DoPJ1OCTAzI2RvtNuwm6V2BBFedrbYYXyu34KGuErdPwovGQejGbvdDw==
-length: 32752
+edSignature: rYyrclCYIZ6av6eUC4du2dtQmDbhqjbngjLmWlgl2eJPMsOHzt1SXKshaeseAntkqS3zX6WETTeFr5UVgykICQ==
+length: 34270
 -->

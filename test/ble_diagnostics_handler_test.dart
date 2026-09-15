@@ -25,9 +25,7 @@ void main() {
           'generation': 4,
           'nativeIsScanning': false,
         },
-        'cache': [
-          {'deviceId': 'scale-1', 'instanceId': 42},
-        ],
+        'cache': [{'deviceId': 'scale-1', 'instanceId': 42}],
       };
     final devices = DeviceController([ble]);
     await devices.initialize();

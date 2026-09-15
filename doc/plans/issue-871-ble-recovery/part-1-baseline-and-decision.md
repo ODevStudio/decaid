@@ -112,7 +112,10 @@ WebSocket events, machine snapshots, scan/watch ownership and advertisement
 statistics. This PR extends the read-only BLE snapshot with:
 
 - `diagnosticsVersion: 2`;
-- a UTC wall-clock timestamp plus process-monotonic milliseconds for ordering;
+- a UTC wall-clock timestamp plus a Dart `Stopwatch` monotonic millisecond value
+  for ordering and deltas within the running process/isolate. The monotonic
+  origin is deliberately unspecified and must not be assumed to share Android
+  `elapsedRealtime`'s epoch; use UTC wall time to correlate with native logcat;
 - one bounded logical snapshot per currently cached device: id, name, device
   type, transport, object instance identity, logical connection state and
   available firmware/battery information;

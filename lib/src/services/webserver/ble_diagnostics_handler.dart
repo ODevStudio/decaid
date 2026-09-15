@@ -87,7 +87,7 @@ class BleDiagnosticsHandler {
         }
 
         final information = device is DeviceInformationCapable
-            ? device.currentDeviceInformation
+            ? (device as DeviceInformationCapable).currentDeviceInformation
             : null;
 
         return <String, Object?>{

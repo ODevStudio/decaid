@@ -64,7 +64,10 @@ void main() {
       body['ble']['services'][0]['details']['scan']['nativeIsScanning'],
       false,
     );
-    expect(body['ble']['services'][0]['details']['cache'][0]['instanceId'], 42);
+    expect(
+      body['ble']['services'][0]['details']['cache'][0]['instanceId'],
+      42,
+    );
     final peer = body['connection']['peers'].single;
     expect(peer['deviceId'], 'scale-1');
     expect(peer['name'], 'Original Decent Scale');

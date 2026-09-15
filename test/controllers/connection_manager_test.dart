@@ -55,7 +55,7 @@ class _FakeDe1 implements De1Interface {
   DeviceImplementation get implementation => DeviceImplementation.unifiedDe1;
 
   @override
-  TransportType get transportType => TransportType.unknown;
+  final TransportType transportType;
 
   @override
   Stream<ConnectionState> get connectionState =>
@@ -79,6 +79,7 @@ class _FakeDe1 implements De1Interface {
     this.disconnectCompleter,
     this.connectStarted,
     this.connectCompleter,
+    this.transportType = TransportType.unknown,
   }) : name = name ?? 'DE1-$deviceId';
 
   @override
@@ -2371,11 +2372,12 @@ void main() {
         );
       });
 
-      test('failed cleanup keeps the same-device lease', () async {
+      test('adapter reset releases a failed BLE cleanup lease', () async {
         mockDe1Controller.failNextConnectWith = StateError('connect failed');
         final machine = _FakeDe1(
           deviceId: 'unclean-machine',
           disconnectError: StateError('cleanup failed'),
+          transportType: TransportType.ble,
         );
 
         expect(
@@ -2389,6 +2391,29 @@ void main() {
           ConnectionOutcome.conflict,
         );
         expect(mockDe1Controller.connectMachineCallCount, 1);
+
+        final healthyScale = TestScale(deviceId: 'healthy-scale');
+        expect(
+          (await connectionManager.connectScale(healthyScale)).outcome,
+          ConnectionOutcome.connected,
+        );
+
+        mockScanner.mockAdapterState(AdapterState.poweredOff);
+        await Future<void>.delayed(Duration.zero);
+        mockScanner.mockAdapterState(AdapterState.poweredOn);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          (await connectionManager.connectMachine(
+            _FakeDe1(
+              deviceId: 'unclean-machine',
+              transportType: TransportType.ble,
+            ),
+          )).outcome,
+          ConnectionOutcome.connected,
+        );
+        expect(mockScaleController.connectedScaleOrNull, same(healthyScale));
+        healthyScale.dispose();
       });
 
       test('stays at idle on failure when no machine connected', () async {

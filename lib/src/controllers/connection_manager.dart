@@ -192,6 +192,7 @@ class ConnectionManager {
   bool _adapterRecoveryQueued = false;
   bool _adapterRecoveryNeeded = false;
   int _adapterRecoveryEpoch = 0;
+  int _adapterResetEpoch = 0;
   AdapterState? _lastAdapterState;
   Timer? _adapterRecoveryTimer;
 
@@ -637,6 +638,8 @@ class ConnectionManager {
         }
       }
       if (state == AdapterState.poweredOff) {
+        _adapterResetEpoch++;
+        _settleFailedBleCleanupAttempts();
         final error = ConnectionError(
           kind: ConnectionErrorKind.adapterOff,
           severity: ConnectionErrorSeverity.error,
@@ -863,12 +866,21 @@ class ConnectionManager {
     }
   }
 
+  void _settleFailedBleCleanupAttempts() {
+    for (final attempt in _connectionAttempts.active.where(
+      (attempt) => attempt.ble && attempt.cleanupFailed,
+    )) {
+      attempt.settle();
+    }
+  }
+
   Future<bool> _retireAttempt(
     ConnectionAttemptLease attempt,
     Future<void> source,
     bool Function() adopted,
     Future<void> Function() cleanup,
   ) async {
+    final adapterResetEpoch = _adapterResetEpoch;
     Object? sourceError;
     StackTrace? sourceStack;
     try {
@@ -885,6 +897,11 @@ class ConnectionManager {
           await cleanup();
         } catch (error, stackTrace) {
           cleanupSucceeded = false;
+          if (attempt.ble && adapterResetEpoch != _adapterResetEpoch) {
+            attempt.settle();
+          } else {
+            attempt.markCleanupFailed();
+          }
           _log.warning(
             'Connection attempt cleanup failed for ${attempt.deviceId}',
             error,

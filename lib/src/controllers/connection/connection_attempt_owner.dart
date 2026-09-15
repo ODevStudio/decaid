@@ -65,6 +65,7 @@ class ConnectionAttemptLease {
 
   bool _cancelled = false;
   bool _settled = false;
+  bool _cleanupFailed = false;
 
   ConnectionAttemptLease._({
     required ConnectionAttemptOwner owner,
@@ -80,9 +81,13 @@ class ConnectionAttemptLease {
 
   bool get cancelled => _cancelled;
 
+  bool get cleanupFailed => _cleanupFailed;
+
   bool get mayAdopt => !_cancelled && !_settled && _owner._isCurrent(this);
 
   bool cancel() => _owner._cancel(this);
+
+  void markCleanupFailed() => _cleanupFailed = true;
 
   bool settle() => _owner._settle(this);
 }

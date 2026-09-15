@@ -11,9 +11,10 @@ import 'package:shelf_plus/shelf_plus.dart';
 
 import 'helpers/mock_device_discovery_service.dart';
 import 'helpers/mock_settings_service.dart';
+import 'helpers/test_scale.dart';
 
 void main() {
-  test('BLE diagnostics is read-only and includes service details', () async {
+  test('BLE diagnostics is read-only and includes correlated state', () async {
     final ble = MockBleDiscoveryService()
       ..diagnosticDetails = {
         'scan': {
@@ -28,6 +29,13 @@ void main() {
       };
     final devices = DeviceController([ble]);
     await devices.initialize();
+    final scale = TestScale(
+      deviceId: 'scale-1',
+      name: 'Original Decent Scale',
+    );
+    ble.addDevice(scale);
+    await Future<void>.delayed(Duration.zero);
+
     final settings = SettingsController(MockSettingsService());
     await settings.loadSettings();
     final manager = ConnectionManager(
@@ -49,12 +57,27 @@ void main() {
     final body = jsonDecode(await response.readAsString());
 
     expect(response.statusCode, 200);
+    expect(body['diagnosticsVersion'], 2);
+    expect(body['timestamp'], isA<String>());
+    expect(body['monotonicMs'], isA<int>());
     expect(
       body['ble']['services'][0]['details']['scan']['nativeIsScanning'],
       false,
     );
     expect(body['ble']['services'][0]['details']['cache'][0]['instanceId'], 42);
+    expect(body['ble']['devices'], [
+      {
+        'deviceId': 'scale-1',
+        'name': 'Original Decent Scale',
+        'type': 'scale',
+        'transport': 'unknown',
+        'instanceId': isA<int>(),
+        'state': 'connected',
+      },
+    ]);
+    expect(body['connection']['preferredMachineId'], isNull);
     expect(body['connection']['preferredScaleId'], isNull);
+    expect(body['connection']['conditions'], isEmpty);
     expect(
       (await devices.bleDiagnostics()).single['details'],
       ble.diagnosticDetails,
@@ -63,5 +86,6 @@ void main() {
     manager.dispose();
     devices.dispose();
     ble.dispose();
+    scale.dispose();
   });
 }

@@ -106,6 +106,22 @@ detects the generation mismatch after `runScan` returns and skips policy.
 `cancelSelectionSession()` finalises an already-completed scan as cancelled
 without touching an in-flight scan.
 
+Machine and scale source connects also hold a normalized device-id lease until
+the source and any stale-candidate cleanup finish. Caller timeout invalidates
+the controller generation and may return before retirement, but a same-id
+replacement remains blocked. Scan cancellation invalidates only early connects
+owned by that scan; adapter loss invalidates BLE attempts; explicit disconnect
+invalidates the matching role; and shutdown invalidates all attempts before it
+waits for connection work. A late successful stale candidate is disconnected
+before its lease is released. A source failure is not disconnected twice.
+
+Remembered-machine quick connect has no shorter host wrapper timeout around
+`device.onConnect()`. The transport owns its native deadline, while Decaid owns
+the single retry for a real `BleConnectException`. Direct connects disarm the
+upper `ScaleWatch` before transport connection can stop native scanning;
+watch-originated scale connects retain the watch generation so failure can
+rearm it.
+
 Repeated explicit scan requests ("ReScan", stale-scan recovery, repeated
 REST/UI calls) supersede the active scan and coalesce into a single
 queued replacement. The superseded scan emits one cancelled report; the
@@ -117,6 +133,12 @@ Cancel (launcher) and route-back interception both route through
 `cancelActiveScan()`. "View found devices" intentionally stops discovery
 and proceeds with partial results — that is a different action, not
 cancellation.
+
+The reviewed Android direct-admission/lifecycle candidate ends at local fork
+commit `546d55bbaef7f750c570b88d8c797299fc01335a`. Until that revision is
+published, Decaid remains reproducibly pinned to
+`16bbfbce197eb5913c6b16578363f7dc943e605d`; do not hand-edit the lockfile or
+pin the uncorrected upstream PR head.
 
 ## Footgun #1: GATT-133 on Cold Boot
 

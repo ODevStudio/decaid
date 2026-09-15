@@ -530,6 +530,22 @@ queued requests, and waits for in-flight connection work. It then disconnects
 the machine before the scale while isolating each cleanup failure. Flutter
 `detached` and requested desktop exit use this path; `paused` and `hidden` do not.
 
+### Connection Attempt Retirement
+
+Each machine or scale source connect owns its normalized device id through
+source completion and stale-candidate cleanup. A caller-visible timeout fences
+controller adoption immediately but does not abandon the source Future or
+release the id for a replacement. If the source later succeeds, its candidate
+is disconnected before the lease is released; if it fails, the existing
+controller and transport failure path owns teardown.
+
+Cancellation follows the initiating owner. Cancelling a scan affects only its
+early connects, USB attach supersedes only an automatic machine attempt,
+adapter loss affects only BLE attempts, explicit disconnect affects the
+matching role, and shutdown affects all attempts. Direct connects stop an
+active background scale watch before transport connection; a connect initiated
+by that watch keeps its watch generation and can rearm after failure.
+
 ### Disconnect Handling
 
 ConnectionManager listens for disconnects automatically:

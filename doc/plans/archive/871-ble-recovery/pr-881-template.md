@@ -17,12 +17,17 @@ acceptance.
 
 - `dart format` completed for the changed Dart files.
 - `flutter analyze --no-pub`: no issues.
-- Connection manager and USB attach suites: 212 passed.
+- Connection manager, USB attach, and attempt-owner suites: 215 passed.
 - Discovery and controller generation suites: 59 passed.
-- Full `flutter test --no-pub`: 4,268 passed, one existing skip.
-- `flutter build apk --debug --no-pub --dart-define=simulate=1`: failed before
-  project configuration because Java could not establish a loopback
-  connection.
+- Integrated Block A and D candidate full `flutter test --no-pub`: 4,274
+  passed, one existing skip. Candidate resolution used local corrected fork
+  `546d55bbaef7f750c570b88d8c797299fc01335a`; committed dependency files remain
+  publishable on the baseline pin.
+- JDK 17 `Selector.open()` still failed with a short process-scoped
+  `jdk.net.unixdomain.tmpdir`; corrected-fork Android compilation and the
+  candidate Android app build remain not run because Gradle cannot start.
+- Simulated Windows REST smoke did not start because the host CMake is 3.20
+  and the current Firebase SDK requires 3.22 or newer.
 - Android 10/Teclast, DE1, and original full-height scale: `NOT RUN` because
   the required hardware is unavailable.
 

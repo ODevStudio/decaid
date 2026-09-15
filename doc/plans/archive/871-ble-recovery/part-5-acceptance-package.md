@@ -44,10 +44,11 @@ publication, Android compilation, and physical acceptance remain open gates.
 | Integrated verification | Block A plus Block D | local tree `ff4ab5a779954154aadc2b9ed74cb075af7ad825`, advanced from reviewed tree `7b97ef783d28773d9a1db42c562eb6f2ad68cac2`, with ignored local fork override |
 | `flutter_js` | `d6e8849210c0081d19c78be97628947e6e2976e2` | unchanged |
 
-Host verification used Windows x64, Flutter 3.44.8, Dart 3.12.2, Temurin JDK
-17.0.17, Gradle 8.14.3, Kotlin 2.3.21, compile SDK 36, target SDK 35, and minimum
-SDK 28. CI uses Flutter 3.44.2; host results are not substituted for CI or
-Android hardware results.
+Host verification used Windows x64, Flutter 3.44.8, Dart 3.12.2, Gradle
+8.14.3, Kotlin 2.3.21, compile SDK 36, target SDK 35, and minimum SDK 28.
+Android startup probes used both Temurin JDK 17.0.17 and Android Studio's
+JetBrains JBR 21.0.8. CI uses Flutter 3.44.2; host results are not substituted
+for CI or Android hardware results.
 
 ## Software evidence
 
@@ -60,9 +61,14 @@ Android hardware results.
 
 The JDK 17 selector probe still failed after setting a short process-scoped
 `jdk.net.unixdomain.tmpdir`, reaching `UnixDomainSockets.connect0` with
-`Invalid argument: connect`. Corrected-fork and candidate-app Android builds
-were therefore `NOT RUN`; earlier baseline attempts failed before Gradle
-project configuration and are not Android compilation evidence.
+`Invalid argument: connect`. Android Studio's materially different JetBrains
+JBR 21.0.8 launched Gradle 8.14.3, but both `gradle help --no-daemon` and an
+independent `Selector.open()` probe failed at the same loopback path before
+project evaluation. Corrected-fork and candidate-app Android builds were
+therefore `NOT RUN`; these startup attempts are not Android compilation
+evidence. Raw JBR output is retained in
+`android-studio-jbr-gradle-startup.txt` and
+`android-studio-jbr-selector-probe.txt` in the evidence directory.
 
 ## Fixed comparison contract
 
@@ -116,9 +122,16 @@ reported separately from a real controller/radio failure.
 | Target | Observation | Coverage |
 | --- | --- | --- |
 | Samsung `SM-X210` tablet | Read-only ADB inventory: Android 16 / SDK 36, build `BP2A.250605.031.A3`, existing `net.tadel.reaprime` version `1.0.0` build 2735 | Inventory only; the running Decaid app was not stopped, launched, changed, or replaced, and no candidate APK was installed |
+| Windows Android toolchain | Android Studio `AI-252.27397.103.2522.14514259`, bundled JetBrains JBR 21.0.8, SDK 36.1.0 at `C:/AndroidSDK` | Toolchain inventory and startup failure only; Gradle project evaluation and Android compilation did not run |
+| COM5 HDS USB | `USB-SERIAL CH340K`, WCH, VID/PID `1A86:7522`, revision `0264`; one 12-second passive 115200 8N1 capture received 424 bytes, including 12 ASCII `Weight: 0.00` samples and two health lines | `HARDWARE/TRANSPORT BASELINE`, not candidate app or Android BLE acceptance; no bytes were written, firmware was not reported, reconnect was not exercised, and the port was closed and disposed |
 
-This tablet is not the affected Android 10/Teclast target and provides no BLE,
-DE1, original-scale, or candidate-build acceptance evidence.
+The tablet is not the affected Android 10/Teclast target and provides no BLE,
+DE1, original-scale, or candidate-build acceptance evidence. COM5 proves only
+that the host can open the HDS USB transport and receive passive scale output.
+No existing Windows runner could exercise `SerialServiceDesktop` without the
+blocked app build, so the HDS enable/readiness path and app-owned reconnect
+remain unverified. Raw serial evidence is
+`com5-hds-passive-baseline.txt` in the evidence directory.
 
 ## Capture and support checklist
 
@@ -179,8 +192,9 @@ GATT clients remain outside the direct-admission guarantee.
 
 - Prerequisite software reviews: implemented locally and host-verified; the
   integrated Decaid tree is candidate-verified against local corrected fork C.
-- Corrected-fork and candidate-app Android compilation: unverified because the
-  host JDK cannot open Gradle's selector.
+- Corrected-fork and candidate-app Android compilation: unverified because
+  both Temurin JDK 17 and Android Studio JBR 21 fail to open the selector used
+  by Gradle before project evaluation.
 - Exact candidate dependency pin: blocked by unpublished corrected fork commit.
 - Affected-device matrix: `NOT RUN`.
 - Maintainer hardware sign-off: pending.

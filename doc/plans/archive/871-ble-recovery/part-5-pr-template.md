@@ -19,9 +19,9 @@ is unpublished and affected-device acceptance has not run.
   platform skips.
 - Block D against local corrected C: analyze clean; focused suites 215 and 59
   passed; final integrated suite passed 4,274 tests with one skip.
-- Corrected-fork and candidate-app Android compilation: `NOT RUN` after the JDK
-  17 selector probe failed even with a short process-scoped Unix-domain temp
-  directory. Earlier baseline attempts failed before Gradle configuration.
+- Corrected-fork and candidate-app Android compilation: `NOT RUN`; Temurin JDK
+  17 and Android Studio's bundled JetBrains JBR 21 both fail at
+  `Selector.open()` before Gradle project evaluation.
 - Simulated REST smoke: `NOT RUN`; CMake 3.28 and private Microsoft-signed
   NuGet 7.9 configured and compiled the Windows candidate until
   `universal_ble_plugin.dll` failed to link with unresolved MSVC
@@ -29,6 +29,10 @@ is unpublished and affected-device acceptance has not run.
 - Supplemental Samsung `SM-X210` / Android 16 inventory: read-only only; the
   existing Decaid installation was untouched and no candidate APK was built or
   installed.
+- Supplemental COM5 HDS USB capture: passive 115200 8N1 transport baseline
+  received 12 weight samples and two health lines with no writes; the port was
+  closed and disposed. Candidate HDS readiness/reconnect and Android BLE
+  acceptance remain `NOT RUN`.
 - Android 10/Teclast, DE1, and original full-height scale: `NOT RUN` because the
   required hardware is unavailable.
 

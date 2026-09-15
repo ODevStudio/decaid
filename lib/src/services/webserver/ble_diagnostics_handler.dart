@@ -27,7 +27,7 @@ class BleDiagnosticsHandler {
   Future<Response> _handleGet(Request request) async {
     final status = connectionManager.currentStatus;
     final services = await deviceController.bleDiagnostics();
-    final devices = await _deviceSnapshots();
+    final peers = await _deviceSnapshots();
     final sampledAt = DateTime.now().toUtc();
 
     return jsonOk({
@@ -37,7 +37,6 @@ class BleDiagnosticsHandler {
       'ble': {
         'adapterState': deviceController.currentAdapterState.name,
         'services': services,
-        'devices': devices,
       },
       'connection': {
         'phase': status.phase.name,
@@ -68,6 +67,7 @@ class BleDiagnosticsHandler {
               'error': condition.connectionError.toJson(),
             },
         ],
+        'peers': peers,
       },
     });
   }

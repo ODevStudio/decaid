@@ -113,7 +113,14 @@ replacement remains blocked. Scan cancellation invalidates only early connects
 owned by that scan; adapter loss invalidates BLE attempts; explicit disconnect
 invalidates the matching role; and shutdown invalidates all attempts before it
 waits for connection work. A late successful stale candidate is disconnected
-before its lease is released. A source failure is not disconnected twice.
+before its lease is released. A failed source is cleaned up before release;
+failed cleanup keeps the same-device lease reserved until Android reports an
+adapter-off epoch. Native adapter-off cleanup clears close recovery, GATT
+ownership, and the device cache before publishing that state, so only then can
+Decaid release cleanup-failed BLE leases. Without that confirmation the lease
+stays reserved; restarting the manager is the non-BLE recovery route. After an
+asynchronous scale-watch stop, the lease is checked again before the machine or
+scale source starts.
 
 Remembered-machine quick connect has no shorter host wrapper timeout around
 `device.onConnect()`. The transport owns its native deadline, while Decaid owns

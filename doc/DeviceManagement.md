@@ -536,8 +536,13 @@ Each machine or scale source connect owns its normalized device id through
 source completion and stale-candidate cleanup. A caller-visible timeout fences
 controller adoption immediately but does not abandon the source Future or
 release the id for a replacement. If the source later succeeds, its candidate
-is disconnected before the lease is released; if it fails, the existing
-controller and transport failure path owns teardown.
+is disconnected before the lease is released. Failed sources are also cleaned
+up, and cleanup failure keeps the same-device lease reserved so an unresolved
+transport cannot overlap a replacement. A confirmed adapter-off epoch releases
+cleanup-failed BLE leases because the native transport clears its old GATT
+owners before publishing that state. Other failed cleanup remains blocked until
+the manager restarts. Cancellation is checked again after an asynchronous
+scale-watch stop and before either device source starts.
 
 Cancellation follows the initiating owner. Cancelling a scan affects only its
 early connects, USB attach supersedes only an automatic machine attempt,

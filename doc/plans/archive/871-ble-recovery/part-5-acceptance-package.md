@@ -22,8 +22,8 @@ non-fetchable commit or the uncorrected PR #28 head.
 
 ## Review result
 
-No unresolved correctness defect remains in the locally reviewed A through D
-software diffs. The Decaid correction reuses controller and `ScaleWatch`
+No known host-test correctness defect remains in the locally reviewed A
+through D software diffs. The Decaid correction reuses controller and `ScaleWatch`
 generation fences and adds only one device-id lease owner. Unused diagnostic,
 cancellation-reason, and monotonic-generation state was removed. No second
 watch pause layer, app-global scheduler, global GATT command queue, or new
@@ -40,7 +40,8 @@ publication, Android compilation, and physical acceptance remain open gates.
 | Baseline and diagnostics | PR #878 `dae28ac16a30a221f65e7a9216317e15f57d7f86` | local correction `4540b730d20a23f4c80321337a1c28bac072420c` |
 | Native admission | fork baseline `16bbfbce197eb5913c6b16578363f7dc943e605d` | PR #25 `f61b5666e8b3542a043b2f0da8056b70d97da0df` |
 | Native lifecycle | PR #28 `1dca59494a684dbb6007e3b2819e7e11ee0ae987` | local correction `546d55bbaef7f750c570b88d8c797299fc01335a` |
-| Decaid integration | PR #881 `c9a22221dd08f9f42f261d9b628fa7d782ed3f23` | local correction `bd437c99a9bbfd5a011687d55e4e193060f3770c` |
+| Decaid integration | PR #881 `c9a22221dd08f9f42f261d9b628fa7d782ed3f23` | local correction `e91619d70235b5b09f010fb8f4f6011fe173b994` |
+| Integrated verification | Block A plus Block D | local tree `ff4ab5a779954154aadc2b9ed74cb075af7ad825`, advanced from reviewed tree `7b97ef783d28773d9a1db42c562eb6f2ad68cac2`, with ignored local fork override |
 | `flutter_js` | `d6e8849210c0081d19c78be97628947e6e2976e2` | unchanged |
 
 Host verification used Windows x64, Flutter 3.44.8, Dart 3.12.2, Temurin JDK
@@ -52,15 +53,16 @@ Android hardware results.
 
 | Block | Result | Limits |
 | --- | --- | --- |
-| A: Decaid baseline/diagnostics | Analyze clean; focused tests 5/5 and 4/4; full Flutter suite 4,255 passed with one skip | No affected hardware |
-| B: native admission | Analyze clean; host Flutter suite 136 passed with 13 platform skips | Android Gradle failed before configuration with loopback error; inspected-head CI is green |
-| C: native lifecycle | Analyze clean; host Flutter suite 136 passed with 13 platform skips | Android Gradle failed before configuration; CI covers the uncorrected PR head, not local correction |
-| D: Decaid integration | Analyze clean; focused suites 212 and 59 passed; full Flutter suite 4,268 passed with one skip | Android debug build failed before configuration with loopback error |
+| A: Decaid baseline/diagnostics | Implemented and host-verified: analyze clean; focused tests 5/5 and 4/4; full Flutter suite 4,255 passed with one skip | No affected hardware |
+| B: native admission | Implemented and host-verified: analyze clean; host Flutter suite 136 passed with 13 platform skips | Inspected-head CI is green; local Android compilation is unverified |
+| C: native lifecycle | Implemented and host-verified at local correction `546d55bbaef7f750c570b88d8c797299fc01335a`: analyze clean; 136 host tests passed with 13 platform skips | Android-unverified; CI covers the uncorrected PR head, not the local correction |
+| D: Decaid integration | Implemented and candidate-verified against local C: analyze clean; focused suites 215 and 59 passed; final integrated suite passed 4,274 tests with one skip | Android-unverified; CMake 3.28 and private Microsoft-signed NuGet 7.9 configured and compiled the Windows candidate until `universal_ble_plugin.dll` failed to link with unresolved MSVC `std::bad_cast` symbols; the simulated REST smoke did not run |
 
-The repeated Android build error was
-`java.io.IOException: Unable to establish loopback connection`. It was not
-retried in the unchanged environment and is not reported as Android
-compilation evidence.
+The JDK 17 selector probe still failed after setting a short process-scoped
+`jdk.net.unixdomain.tmpdir`, reaching `UnixDomainSockets.connect0` with
+`Invalid argument: connect`. Corrected-fork and candidate-app Android builds
+were therefore `NOT RUN`; earlier baseline attempts failed before Gradle
+project configuration and are not Android compilation evidence.
 
 ## Fixed comparison contract
 
@@ -108,6 +110,15 @@ Pass criteria are fixed before execution:
 
 Injected callbacks and mocked 133 faults remain software evidence and must be
 reported separately from a real controller/radio failure.
+
+## Supplemental inventory
+
+| Target | Observation | Coverage |
+| --- | --- | --- |
+| Samsung `SM-X210` tablet | Read-only ADB inventory: Android 16 / SDK 36, build `BP2A.250605.031.A3`, existing `net.tadel.reaprime` version `1.0.0` build 2735 | Inventory only; the running Decaid app was not stopped, launched, changed, or replaced, and no candidate APK was installed |
+
+This tablet is not the affected Android 10/Teclast target and provides no BLE,
+DE1, original-scale, or candidate-build acceptance evidence.
 
 ## Capture and support checklist
 
@@ -166,8 +177,10 @@ GATT clients remain outside the direct-admission guarantee.
 
 ## Sign-off state
 
-- Prerequisite software reviews: complete locally, with dependency publication
-  and Android build limits recorded.
+- Prerequisite software reviews: implemented locally and host-verified; the
+  integrated Decaid tree is candidate-verified against local corrected fork C.
+- Corrected-fork and candidate-app Android compilation: unverified because the
+  host JDK cannot open Gradle's selector.
 - Exact candidate dependency pin: blocked by unpublished corrected fork commit.
 - Affected-device matrix: `NOT RUN`.
 - Maintainer hardware sign-off: pending.

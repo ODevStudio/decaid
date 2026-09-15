@@ -877,27 +877,29 @@ class ConnectionManager {
       sourceError = error;
       sourceStack = stackTrace;
     }
+    var cleanupSucceeded = true;
     try {
-      if (!attempt.mayAdopt || (sourceError == null && !adopted())) {
-        if (sourceError == null) {
-          try {
-            await cleanup();
-          } catch (error, stackTrace) {
-            _log.warning(
-              'Connection attempt cleanup failed for ${attempt.deviceId}',
-              error,
-              stackTrace,
-            );
-          }
+      final mayAdopt = attempt.mayAdopt;
+      if (!mayAdopt || sourceError != null || !adopted()) {
+        try {
+          await cleanup();
+        } catch (error, stackTrace) {
+          cleanupSucceeded = false;
+          _log.warning(
+            'Connection attempt cleanup failed for ${attempt.deviceId}',
+            error,
+            stackTrace,
+          );
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+        if (mayAdopt && sourceError != null) {
+          Error.throwWithStackTrace(sourceError, sourceStack!);
         }
         return false;
       }
-      if (sourceError != null) {
-        Error.throwWithStackTrace(sourceError, sourceStack!);
-      }
       return true;
     } finally {
-      attempt.settle();
+      if (cleanupSucceeded) attempt.settle();
     }
   }
 
@@ -1853,6 +1855,19 @@ class ConnectionManager {
 
     try {
       if (_scaleWatch.hasPendingRequest) await _scaleWatch.disarm();
+      if (!attempt.mayAdopt) {
+        const result = ConnectionResult.conflict();
+        selectionSession?.scanReport.recordResult(machine.deviceId, result);
+        if (selectionSession == null || !selectionSession.isActive) {
+          _publishStatus(
+            currentStatus.copyWith(
+              phase: ConnectionPhase.idle,
+              pendingAmbiguity: () => null,
+            ),
+          );
+        }
+        return result;
+      }
       final source = de1Controller.connectToDe1(machine);
       sourceStarted = true;
       final adopted = await _trackConnectionWork(
@@ -2040,6 +2055,16 @@ class ConnectionManager {
     try {
       if (disarmWatch && _scaleWatch.hasPendingRequest) {
         await _scaleWatch.disarm();
+      }
+      if (!attempt.mayAdopt) {
+        _publishStatus(
+          currentStatus.copyWith(
+            phase: _machineConnected
+                ? ConnectionPhase.ready
+                : ConnectionPhase.idle,
+          ),
+        );
+        return const ConnectionResult.conflict();
       }
       final source = scaleController.connectToScale(scale);
       sourceStarted = true;

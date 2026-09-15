@@ -150,6 +150,9 @@ class _FailingFakeDe1 implements De1Interface {
   _FailingFakeDe1({this.deviceId = 'failing-de1'}) : name = 'DE1-$deviceId';
 
   @override
+  Future<void> disconnect() async {}
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
@@ -2328,6 +2331,66 @@ void main() {
         scale.dispose();
       });
 
+      test('failed machine source owns its id through cleanup', () async {
+        await connectionManager.dispose();
+        connectionManager = ConnectionManager(
+          deviceScanner: mockScanner,
+          de1Controller: mockDe1Controller,
+          scaleController: mockScaleController,
+          settingsController: settingsController,
+          connectTimeout: const Duration(milliseconds: 10),
+        );
+        final disconnectStarted = Completer<void>();
+        final disconnectCompleter = Completer<void>();
+        final machine = _FakeDe1(
+          deviceId: 'failed-machine',
+          disconnectStarted: disconnectStarted,
+          disconnectCompleter: disconnectCompleter,
+        );
+        mockDe1Controller.failNextConnectWith = StateError('connect failed');
+
+        final failed = connectionManager.connectMachine(machine);
+        await disconnectStarted.future.timeout(const Duration(seconds: 1));
+        expect((await failed).outcome, ConnectionOutcome.timedOut);
+        expect(
+          (await connectionManager.connectMachine(
+            _FakeDe1(deviceId: 'FAILED-MACHINE'),
+          )).outcome,
+          ConnectionOutcome.conflict,
+        );
+
+        disconnectCompleter.complete();
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          (await connectionManager.connectMachine(
+            _FakeDe1(deviceId: 'failed-machine'),
+          )).outcome,
+          ConnectionOutcome.connected,
+        );
+      });
+
+      test('failed cleanup keeps the same-device lease', () async {
+        mockDe1Controller.failNextConnectWith = StateError('connect failed');
+        final machine = _FakeDe1(
+          deviceId: 'unclean-machine',
+          disconnectError: StateError('cleanup failed'),
+        );
+
+        expect(
+          (await connectionManager.connectMachine(machine)).outcome,
+          ConnectionOutcome.failed,
+        );
+        expect(
+          (await connectionManager.connectMachine(
+            _FakeDe1(deviceId: 'UNCLEAN-MACHINE'),
+          )).outcome,
+          ConnectionOutcome.conflict,
+        );
+        expect(mockDe1Controller.connectMachineCallCount, 1);
+      });
+
       test('stays at idle on failure when no machine connected', () async {
         mockScaleController.shouldFailConnect = true;
 
@@ -3341,6 +3404,49 @@ void main() {
         expect(observingController.watchActiveAtConnect, isFalse);
         expect(mockScanner.stopWatchCallCount, stopsBeforeConnect + 1);
         expect(mockScanner.watchActive, isFalse);
+      });
+
+      test('cancelled machine does not start after watch disarm', () async {
+        connectionManager = buildWatchManager();
+        await settingsController.setPreferredScaleId(scaleId);
+        mockDe1Controller.de1Subject.add(_FakeDe1(deviceId: 'connected-de1'));
+        await Future<void>.delayed(Duration.zero);
+        final stopWatch = Completer<void>();
+        mockScanner.holdNextWatchStop = stopWatch;
+
+        final connecting = connectionManager.connectMachine(
+          _FakeDe1(deviceId: 'cancelled-machine'),
+        );
+        await Future<void>.delayed(Duration.zero);
+        await connectionManager.disconnectMachine();
+        stopWatch.complete();
+
+        expect((await connecting).outcome, ConnectionOutcome.conflict);
+        expect(mockDe1Controller.connectMachineCallCount, 0);
+        expect(
+          mockDe1Controller.connectedDe1OrNull?.deviceId,
+          isNot('cancelled-machine'),
+        );
+      });
+
+      test('cancelled scale does not start after watch disarm', () async {
+        connectionManager = buildWatchManager();
+        await settingsController.setPreferredScaleId(scaleId);
+        mockDe1Controller.de1Subject.add(_FakeDe1(deviceId: 'connected-de1'));
+        await Future<void>.delayed(Duration.zero);
+        final stopWatch = Completer<void>();
+        mockScanner.holdNextWatchStop = stopWatch;
+
+        final connecting = connectionManager.connectScale(
+          TestScale(deviceId: 'cancelled-scale'),
+        );
+        await Future<void>.delayed(Duration.zero);
+        await connectionManager.disconnectScale();
+        stopWatch.complete();
+
+        expect((await connecting).outcome, ConnectionOutcome.conflict);
+        expect(mockScaleController.connectCalls, isEmpty);
+        expect(mockScaleController.connectedScaleOrNull, isNull);
       });
 
       test(

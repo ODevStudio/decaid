@@ -67,10 +67,7 @@ class ScaleController {
       await scale.onConnect();
     } catch (e) {
       log.warning('Scale failed to connect (onConnect threw)', e);
-      await snapshotSubscription.cancel();
-      if (identical(_scaleSnapshot, snapshotSubscription)) {
-        _scaleSnapshot = null;
-      }
+      await _releaseSnapshotSubscription(snapshotSubscription);
       if (generation == _connectionGeneration) {
         _connectionController.add(ConnectionState.disconnected);
       }
@@ -81,10 +78,7 @@ class ScaleController {
         'Ignoring stale scale connect completion for ${scale.deviceId} '
         '(attempt=$generation, current=$_connectionGeneration)',
       );
-      await snapshotSubscription.cancel();
-      if (identical(_scaleSnapshot, snapshotSubscription)) {
-        _scaleSnapshot = null;
-      }
+      await _releaseSnapshotSubscription(snapshotSubscription);
       return;
     }
     final state = await scale.connectionState.first;
@@ -93,18 +87,12 @@ class ScaleController {
         'Ignoring stale scale readiness for ${scale.deviceId} '
         '(attempt=$generation, current=$_connectionGeneration)',
       );
-      await snapshotSubscription.cancel();
-      if (identical(_scaleSnapshot, snapshotSubscription)) {
-        _scaleSnapshot = null;
-      }
+      await _releaseSnapshotSubscription(snapshotSubscription);
       return;
     }
     if (state != ConnectionState.connected) {
       log.warning('Scale failed to connect (state: ${state.name})');
-      await snapshotSubscription.cancel();
-      if (identical(_scaleSnapshot, snapshotSubscription)) {
-        _scaleSnapshot = null;
-      }
+      await _releaseSnapshotSubscription(snapshotSubscription);
       _connectionController.add(ConnectionState.disconnected);
       throw StateError('Scale failed to connect (state: ${state.name})');
     }
@@ -119,6 +107,13 @@ class ScaleController {
 
   void invalidatePendingConnectionAttempt() {
     _connectionGeneration++;
+  }
+
+  Future<void> _releaseSnapshotSubscription(
+    StreamSubscription<ScaleSnapshot> subscription,
+  ) async {
+    await subscription.cancel();
+    if (identical(_scaleSnapshot, subscription)) _scaleSnapshot = null;
   }
 
   Future<void> adoptScale(Scale scale) async {

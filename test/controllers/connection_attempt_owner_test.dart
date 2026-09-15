@@ -10,24 +10,23 @@ void main() {
         final attempt = owner.acquire('AA:BB', automatic: true)!;
 
         expect(attempt.mayAdopt, isTrue);
-        expect(attempt.cancel(reason: 'timeout'), isTrue);
+        expect(attempt.cancel(), isTrue);
         expect(attempt.mayAdopt, isFalse);
-        expect(owner.isBlocked('aa:bb'), isTrue);
+        expect(owner.active, contains(same(attempt)));
         expect(owner.acquire('aa:bb'), isNull);
 
         expect(attempt.settle(), isTrue);
-        expect(owner.isBlocked('AA:BB'), isFalse);
+        expect(owner.acquire('AA:BB'), isNotNull);
       },
     );
 
-    test('repeated cancel preserves the first cancellation owner', () {
+    test('repeated cancel is idempotent', () {
       final owner = ConnectionAttemptOwner();
       final attempt = owner.acquire('AA:BB')!;
 
-      expect(attempt.cancel(reason: 'caller timeout'), isTrue);
-      expect(attempt.cancel(reason: 'shutdown'), isFalse);
-      expect(attempt.cancelReason, 'caller timeout');
-      expect(owner.isBlocked('aa:bb'), isTrue);
+      expect(attempt.cancel(), isTrue);
+      expect(attempt.cancel(), isFalse);
+      expect(owner.active, contains(same(attempt)));
     });
 
     test('stale settle cannot release a replacement attempt', () {
@@ -37,7 +36,7 @@ void main() {
 
       final replacement = owner.acquire('DEVICE-1')!;
       expect(first.settle(), isFalse);
-      expect(owner.activeFor('device-1'), same(replacement));
+      expect(owner.active, contains(same(replacement)));
       expect(replacement.mayAdopt, isTrue);
     });
 
@@ -47,7 +46,7 @@ void main() {
       expect(first.settle(), isTrue);
 
       final replacement = owner.acquire('device-1')!;
-      expect(first.cancel(reason: 'late timeout'), isFalse);
+      expect(first.cancel(), isFalse);
       expect(replacement.cancelled, isFalse);
       expect(replacement.mayAdopt, isTrue);
     });
@@ -57,26 +56,10 @@ void main() {
       final machine = owner.acquire('machine')!;
       final scale = owner.acquire('scale')!;
 
-      expect(machine.cancel(reason: 'scan cancelled'), isTrue);
+      expect(machine.cancel(), isTrue);
       expect(machine.mayAdopt, isFalse);
       expect(scale.mayAdopt, isTrue);
-      expect(owner.isBlocked('scale'), isTrue);
-    });
-
-    test('diagnostics expose retiring ownership without releasing it', () {
-      final owner = ConnectionAttemptOwner();
-      final attempt = owner.acquire('AA:BB', automatic: true)!;
-      attempt.cancel(reason: 'caller timeout');
-
-      expect(owner.diagnosticsFor('aa:bb'), {
-        'active': true,
-        'deviceId': 'AA:BB',
-        'generation': attempt.generation,
-        'automatic': true,
-        'cancelled': true,
-        'cancelReason': 'caller timeout',
-        'settled': false,
-      });
+      expect(owner.active, contains(same(scale)));
     });
   });
 }

@@ -23,7 +23,7 @@ De1ShotSettings _emptyShotSettings() => De1ShotSettings(
 class _BlockingTestDe1 extends TestDe1 {
   final Completer<void> connectCompleter = Completer<void>();
 
-  _BlockingTestDe1({super.deviceId, super.name});
+  _BlockingTestDe1({super.deviceId});
 
   @override
   Future<void> onConnect() => connectCompleter.future;

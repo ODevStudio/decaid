@@ -3,28 +3,22 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reaprime/src/controllers/scale_controller.dart';
 import 'package:reaprime/src/models/device/device.dart';
-import 'package:reaprime/src/models/device/device_implementation.dart';
 import 'package:reaprime/src/models/device/scale.dart';
-import 'package:reaprime/src/models/device/transport/data_transport.dart';
-import 'package:rxdart/subjects.dart';
 
-class _BlockingScale implements Scale {
-  @override
-  final String deviceId;
+import '../../helpers/test_scale.dart';
 
-  _BlockingScale(this.deviceId);
-
+class _BlockingScale extends TestScale {
   final Completer<void> connectCompleter = Completer<void>();
-  final BehaviorSubject<ConnectionState> _connectionState =
-      BehaviorSubject.seeded(ConnectionState.discovered);
-  final BehaviorSubject<ScaleSnapshot> _snapshots = BehaviorSubject();
+
+  _BlockingScale(String deviceId)
+    : super(deviceId: deviceId, initialState: ConnectionState.discovered);
 
   void completeConnect() {
     if (!connectCompleter.isCompleted) connectCompleter.complete();
   }
 
   void emitWeight(double weight) {
-    _snapshots.add(
+    emitSnapshot(
       ScaleSnapshot(
         timestamp: DateTime.utc(2026, 9, 15),
         weight: weight,
@@ -33,57 +27,11 @@ class _BlockingScale implements Scale {
     );
   }
 
-  Future<void> close() async {
-    await _connectionState.close();
-    await _snapshots.close();
-  }
-
-  @override
-  String get name => deviceId;
-
-  @override
-  DeviceType get type => DeviceType.scale;
-
-  @override
-  DeviceImplementation get implementation => DeviceImplementation.unifiedDe1;
-
-  @override
-  TransportType get transportType => TransportType.unknown;
-
-  @override
-  Stream<ConnectionState> get connectionState => _connectionState.stream;
-
-  @override
-  Stream<ScaleSnapshot> get currentSnapshot => _snapshots.stream;
-
   @override
   Future<void> onConnect() async {
     await connectCompleter.future;
-    _connectionState.add(ConnectionState.connected);
+    setConnectionState(ConnectionState.connected);
   }
-
-  @override
-  Future<void> disconnect() async {
-    _connectionState.add(ConnectionState.disconnected);
-  }
-
-  @override
-  Future<void> tare() async {}
-
-  @override
-  Future<void> sleepDisplay() async {}
-
-  @override
-  Future<void> wakeDisplay() async {}
-
-  @override
-  Future<void> startTimer() async {}
-
-  @override
-  Future<void> stopTimer() async {}
-
-  @override
-  Future<void> resetTimer() async {}
 }
 
 void main() {
@@ -114,7 +62,7 @@ void main() {
 
       await frameSub.cancel();
       controller.dispose();
-      await pending.close();
+      pending.dispose();
     },
   );
 
@@ -142,8 +90,8 @@ void main() {
       expect((await nextFrame).weight, 42.0);
 
       controller.dispose();
-      await pending.close();
-      await replacement.close();
+      pending.dispose();
+      replacement.dispose();
     },
   );
 }

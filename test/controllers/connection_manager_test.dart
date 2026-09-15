@@ -5,6 +5,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reaprime/src/controllers/connection_error.dart';
 import 'package:reaprime/src/controllers/connection_manager.dart';
+import 'package:reaprime/src/controllers/de1_controller.dart';
 import 'package:reaprime/src/controllers/remembered_devices_controller.dart';
 import 'package:reaprime/src/controllers/scale_controller.dart';
 import 'package:reaprime/src/models/device/remembered_device.dart';
@@ -44,6 +45,8 @@ class _FakeDe1 implements De1Interface {
   final Object? disconnectError;
   final Completer<void>? disconnectStarted;
   final Completer<void>? disconnectCompleter;
+  final Completer<void>? connectStarted;
+  final Completer<void>? connectCompleter;
 
   @override
   DeviceType get type => DeviceType.machine;
@@ -74,7 +77,17 @@ class _FakeDe1 implements De1Interface {
     this.disconnectError,
     this.disconnectStarted,
     this.disconnectCompleter,
+    this.connectStarted,
+    this.connectCompleter,
   }) : name = name ?? 'DE1-$deviceId';
+
+  @override
+  Future<void> onConnect() async {
+    if (connectStarted != null && !connectStarted!.isCompleted) {
+      connectStarted!.complete();
+    }
+    await connectCompleter?.future;
+  }
 
   void emitState(MachineState state) {
     _snapshotController.add(_machineSnapshot(state));
@@ -325,7 +338,13 @@ void main() {
             connectTimeout: Duration.zero,
           );
           final disconnectOrder = <String>[];
-          final machine = _FakeDe1(disconnectOrder: disconnectOrder);
+          final disconnectStarted = Completer<void>();
+          final disconnectCompleter = Completer<void>();
+          final machine = _FakeDe1(
+            disconnectOrder: disconnectOrder,
+            disconnectStarted: disconnectStarted,
+            disconnectCompleter: disconnectCompleter,
+          );
 
           final result = await connectionManager.connectMachine(machine);
           expect(result.outcome, ConnectionOutcome.timedOut);
@@ -339,6 +358,12 @@ void main() {
           expect(disconnectOrder, isEmpty);
 
           connectCompleter.complete();
+          await disconnectStarted.future;
+          await Future<void>.delayed(Duration.zero);
+          expect(shutdownCompleted, isFalse);
+          expect(settingsController.preferredMachineId, isNull);
+
+          disconnectCompleter.complete();
           await shutdown;
 
           expect(disconnectOrder, ['machine']);
@@ -1780,6 +1805,39 @@ void main() {
         expect(settingsController.preferredMachineId, isNull);
       });
 
+      test('does not persist a machine fenced by newer adoption', () async {
+        await connectionManager.dispose();
+        final controller = De1Controller(
+          controller: DeviceController([dummyDiscoveryService]),
+        );
+        connectionManager = ConnectionManager(
+          deviceScanner: mockScanner,
+          de1Controller: controller,
+          scaleController: mockScaleController,
+          settingsController: settingsController,
+        );
+        final connectStarted = Completer<void>();
+        final connectCompleter = Completer<void>();
+        final disconnected = Completer<void>();
+        final stale = _FakeDe1(
+          deviceId: 'stale-machine',
+          connectStarted: connectStarted,
+          connectCompleter: connectCompleter,
+          disconnectStarted: disconnected,
+        );
+        final replacement = _FakeDe1(deviceId: 'replacement-machine');
+
+        final connecting = connectionManager.connectMachine(stale);
+        await connectStarted.future;
+        controller.adoptDevice(replacement);
+        connectCompleter.complete();
+
+        expect((await connecting).outcome, ConnectionOutcome.conflict);
+        expect(controller.connectedDe1OrNull, same(replacement));
+        expect(disconnected.isCompleted, isTrue);
+        expect(settingsController.preferredMachineId, isNull);
+      });
+
       test('connect timeout: machine that never responds uses platform budget '
           '(comms-harden #31)', () {
         fakeAsync((async) {
@@ -2216,6 +2274,58 @@ void main() {
         );
         await Future<void>.delayed(Duration.zero);
         expect(connectionManager.currentStatus.error, isNull);
+      });
+
+      test('timed-out scale owns its id through cleanup', () async {
+        await connectionManager.dispose();
+        final scaleController = ScaleController();
+        connectionManager = ConnectionManager(
+          deviceScanner: mockScanner,
+          de1Controller: mockDe1Controller,
+          scaleController: scaleController,
+          settingsController: settingsController,
+          connectTimeout: Duration.zero,
+        );
+        final connectCompleter = Completer<void>();
+        final disconnectStarted = Completer<void>();
+        final disconnectCompleter = Completer<void>();
+        final scale = _BlockingTestScale(
+          deviceId: 'retiring-scale',
+          connectCompleter: connectCompleter,
+          disconnectStarted: disconnectStarted,
+          disconnectCompleter: disconnectCompleter,
+        );
+
+        final result = await connectionManager.connectScale(scale);
+        expect(result.outcome, ConnectionOutcome.timedOut);
+        expect(
+          (await connectionManager.connectScale(
+            TestScale(deviceId: 'RETIRING-SCALE'),
+          )).outcome,
+          ConnectionOutcome.conflict,
+        );
+
+        connectCompleter.complete();
+        await disconnectStarted.future;
+        expect(
+          (await connectionManager.connectScale(
+            TestScale(deviceId: 'retiring-scale'),
+          )).outcome,
+          ConnectionOutcome.conflict,
+        );
+        expect(settingsController.preferredScaleId, isNull);
+
+        disconnectCompleter.complete();
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+
+        final replacement = TestScale(deviceId: 'retiring-scale');
+        expect(
+          (await connectionManager.connectScale(replacement)).outcome,
+          ConnectionOutcome.connected,
+        );
+        replacement.dispose();
+        scale.dispose();
       });
 
       test('stays at idle on failure when no machine connected', () async {
@@ -3209,6 +3319,30 @@ void main() {
         );
       });
 
+      test('direct scale connect disarms an active watch first', () async {
+        final observingController = _WatchObservingScaleController(mockScanner);
+        connectionManager = ConnectionManager(
+          deviceScanner: mockScanner,
+          de1Controller: mockDe1Controller,
+          scaleController: observingController,
+          settingsController: settingsController,
+        );
+        await settingsController.setPreferredScaleId(scaleId);
+        mockDe1Controller.de1Subject.add(_FakeDe1(deviceId: 'connected-de1'));
+        await Future<void>.delayed(Duration.zero);
+        expect(mockScanner.watchActive, isTrue);
+        final stopsBeforeConnect = mockScanner.stopWatchCallCount;
+
+        final result = await connectionManager.connectScale(
+          TestScale(deviceId: 'direct-scale'),
+        );
+
+        expect(result.outcome, ConnectionOutcome.connected);
+        expect(observingController.watchActiveAtConnect, isFalse);
+        expect(mockScanner.stopWatchCallCount, stopsBeforeConnect + 1);
+        expect(mockScanner.watchActive, isFalse);
+      });
+
       test(
         'scale ambiguity pauses watch and selection updates its target',
         () async {
@@ -3712,6 +3846,67 @@ void main() {
       expect(mockScanner.stopScanCallCount, 1);
     });
 
+    test('does not cancel a direct machine connect', () async {
+      await connectionManager.dispose();
+      final connectCompleter = Completer<void>();
+      final slowController = _SlowMockDe1Controller(
+        controller: DeviceController([]),
+      )..connectCompleter = connectCompleter;
+      final localSettings = SettingsController(MockSettingsService());
+      await localSettings.loadSettings();
+      connectionManager = ConnectionManager(
+        deviceScanner: mockScanner,
+        de1Controller: slowController,
+        scaleController: mockScaleController,
+        settingsController: localSettings,
+      );
+      final machine = _FakeDe1();
+
+      final connecting = connectionManager.connectMachine(machine);
+      await Future<void>.delayed(Duration.zero);
+      connectionManager.cancelActiveScan();
+      connectCompleter.complete();
+
+      expect((await connecting).outcome, ConnectionOutcome.connected);
+      expect(localSettings.preferredMachineId, machine.deviceId);
+    });
+
+    test('cancels an early machine connect owned by the scan', () async {
+      await connectionManager.dispose();
+      final connectCompleter = Completer<void>();
+      final disconnectStarted = Completer<void>();
+      final slowController = _SlowMockDe1Controller(
+        controller: DeviceController([]),
+      )..connectCompleter = connectCompleter;
+      final localSettings = SettingsController(MockSettingsService());
+      await localSettings.loadSettings();
+      await localSettings.setPreferredMachineId('preferred-machine');
+      connectionManager = ConnectionManager(
+        deviceScanner: mockScanner,
+        de1Controller: slowController,
+        scaleController: mockScaleController,
+        settingsController: localSettings,
+      );
+      final scanCompleter = Completer<void>();
+      mockScanner.queuedScanCompleters.add(scanCompleter);
+      final machine = _FakeDe1(
+        deviceId: 'preferred-machine',
+        disconnectStarted: disconnectStarted,
+      );
+      mockScanner.addDevice(machine);
+
+      final connecting = connectionManager.connect();
+      await Future<void>.delayed(Duration.zero);
+      connectionManager.cancelActiveScan();
+      await localSettings.setPreferredMachineId(null);
+      scanCompleter.complete();
+      connectCompleter.complete();
+
+      await disconnectStarted.future;
+      await connecting;
+      expect(localSettings.preferredMachineId, isNull);
+    });
+
     test('clears pending ambiguity when a session is active', () async {
       mockScanner.addDevice(_FakeDe1(deviceId: 'm1'));
       mockScanner.addDevice(_FakeDe1(deviceId: 'm2'));
@@ -4015,16 +4210,23 @@ void main() {
 
 class _SlowMockDe1Controller extends MockDe1Controller {
   Completer<void>? connectCompleter;
+  int _attemptGeneration = 0;
 
   _SlowMockDe1Controller({required super.controller});
 
   @override
   Future<void> connectToDe1(De1Interface de1Interface) async {
+    final generation = ++_attemptGeneration;
     connectCalls.add(de1Interface);
     if (connectCompleter != null) {
       await connectCompleter!.future;
     }
-    de1Subject.add(de1Interface);
+    if (generation == _attemptGeneration) de1Subject.add(de1Interface);
+  }
+
+  @override
+  void invalidatePendingConnectionAttempt() {
+    _attemptGeneration++;
   }
 }
 
@@ -4040,5 +4242,40 @@ class _SlowMockScaleController extends MockScaleController {
       await connectCompleter!.future;
     }
     connectionStateSubject.add(ConnectionState.connected);
+  }
+}
+
+class _BlockingTestScale extends TestScale {
+  final Completer<void> connectCompleter;
+  final Completer<void> disconnectStarted;
+  final Completer<void> disconnectCompleter;
+
+  _BlockingTestScale({
+    required super.deviceId,
+    required this.connectCompleter,
+    required this.disconnectStarted,
+    required this.disconnectCompleter,
+  });
+
+  @override
+  Future<void> onConnect() => connectCompleter.future;
+
+  @override
+  Future<void> disconnect() async {
+    if (!disconnectStarted.isCompleted) disconnectStarted.complete();
+    await disconnectCompleter.future;
+  }
+}
+
+class _WatchObservingScaleController extends MockScaleController {
+  final MockDeviceScanner scanner;
+  bool? watchActiveAtConnect;
+
+  _WatchObservingScaleController(this.scanner);
+
+  @override
+  Future<void> connectToScale(scale) async {
+    watchActiveAtConnect = scanner.watchActive;
+    await super.connectToScale(scale);
   }
 }

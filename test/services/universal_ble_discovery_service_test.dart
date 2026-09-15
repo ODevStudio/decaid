@@ -657,9 +657,11 @@ void main() {
         final prefixes = platform.startScanCalls
             .map((c) => c.filter?.withNamePrefix ?? const <String>[])
             .toList();
-        expect(prefixes.first, [
-          'Decent Scale',
-        ], reason: 'the raced watch start settles before the burst starts');
+        expect(
+          prefixes.first,
+          ['Decent Scale'],
+          reason: 'the raced watch start settles before the burst starts',
+        );
         expect(
           prefixes[1],
           isEmpty,
@@ -919,6 +921,69 @@ void main() {
   });
 
   group('quick-connect identity policy', () {
+    test(
+      'quick-connect keeps ownership past the former host timeout',
+      () async {
+        const deviceId = 'AA:BB:CC:DD:EE:20';
+        final connectStarted = Completer<void>();
+        final releaseConnect = Completer<void>();
+        final transport = _TrackingFakeBleTransport(
+          deviceId: deviceId,
+          onConnect: () async {
+            connectStarted.complete();
+            await releaseConnect.future;
+          },
+        )..queueOnConnectResponses(v13Model: 129, calFlowEst: 100);
+        final sut = UniversalBleDiscoveryService(
+          requiresSystemDevice: () => false,
+          transportFactory:
+              ({
+                required device,
+                required stopScan,
+                required requestLargeMtuNonAndroid,
+                required lifecycleGate,
+              }) => transport,
+        );
+        addTearDown(sut.dispose);
+        await sut.initialize();
+
+        var completed = false;
+        final quickConnect =
+            runZoned(
+              () => sut.tryQuickConnect(
+                const RememberedDevice(
+                  id: deviceId,
+                  name: 'DE1',
+                  type: domain.DeviceType.machine,
+                  implementation: DeviceImplementation.unifiedDe1,
+                  transportType: TransportType.ble,
+                ),
+              ),
+              zoneSpecification: ZoneSpecification(
+                createTimer: (self, parent, zone, duration, callback) {
+                  final accelerated =
+                      duration == const Duration(seconds: 10) ||
+                          duration == const Duration(seconds: 60)
+                      ? const Duration(milliseconds: 1)
+                      : duration;
+                  return parent.createTimer(zone, accelerated, callback);
+                },
+              ),
+            ).then((device) {
+              completed = true;
+              return device;
+            });
+        await connectStarted.future;
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(completed, isFalse);
+        expect(transport.disconnectCalls, 0);
+
+        releaseConnect.complete();
+        expect(await quickConnect, isA<De1Interface>());
+      },
+    );
+
     for (final (apple, stopWatch) in [
       (true, false),
       (false, false),

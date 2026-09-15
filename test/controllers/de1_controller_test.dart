@@ -83,24 +83,29 @@ void main() {
   });
 
   group('connect generation fence', () {
-    test('invalidated pending connect cannot adopt after late completion', () async {
-      final deviceController = DeviceController([MockDeviceDiscoveryService()]);
-      await deviceController.initialize();
-      final de1Controller = De1Controller(controller: deviceController);
-      final pending = _BlockingTestDe1(deviceId: 'de1-pending');
+    test(
+      'invalidated pending connect cannot adopt after late completion',
+      () async {
+        final deviceController = DeviceController([
+          MockDeviceDiscoveryService(),
+        ]);
+        await deviceController.initialize();
+        final de1Controller = De1Controller(controller: deviceController);
+        final pending = _BlockingTestDe1(deviceId: 'de1-pending');
 
-      final connect = de1Controller.connectToDe1(pending);
-      await Future<void>.delayed(Duration.zero);
+        final connect = de1Controller.connectToDe1(pending);
+        await Future<void>.delayed(Duration.zero);
 
-      de1Controller.invalidatePendingConnectionAttempt();
-      pending.connectCompleter.complete();
-      await connect;
+        de1Controller.invalidatePendingConnectionAttempt();
+        pending.connectCompleter.complete();
+        await connect;
 
-      expect(de1Controller.connectedDe1OrNull, isNull);
+        expect(de1Controller.connectedDe1OrNull, isNull);
 
-      await pending.dispose();
-      await de1Controller.dispose();
-    });
+        await pending.dispose();
+        await de1Controller.dispose();
+      },
+    );
 
     test('late completion cannot replace a newer adopted machine', () async {
       final deviceController = DeviceController([MockDeviceDiscoveryService()]);

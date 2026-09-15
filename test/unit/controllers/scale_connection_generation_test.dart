@@ -87,57 +87,63 @@ class _BlockingScale implements Scale {
 }
 
 void main() {
-  test('invalidated pending scale cannot adopt after late completion', () async {
-    final controller = ScaleController();
-    final pending = _BlockingScale('scale-old');
-    final frames = <WeightSnapshot>[];
-    final frameSub = controller.weightSnapshot.listen(frames.add);
+  test(
+    'invalidated pending scale cannot adopt after late completion',
+    () async {
+      final controller = ScaleController();
+      final pending = _BlockingScale('scale-old');
+      final frames = <WeightSnapshot>[];
+      final frameSub = controller.weightSnapshot.listen(frames.add);
 
-    final connect = controller.connectToScale(pending);
-    await Future<void>.delayed(Duration.zero);
+      final connect = controller.connectToScale(pending);
+      await Future<void>.delayed(Duration.zero);
 
-    controller.invalidatePendingConnectionAttempt();
-    pending.completeConnect();
-    await connect;
+      controller.invalidatePendingConnectionAttempt();
+      pending.completeConnect();
+      await connect;
 
-    expect(controller.connectedScaleOrNull, isNull);
+      expect(controller.connectedScaleOrNull, isNull);
 
-    pending.emitWeight(12.3);
-    await Future<void>.delayed(Duration.zero);
-    expect(
-      frames,
-      isEmpty,
-      reason: 'the stale attempt must release its snapshot subscription',
-    );
+      pending.emitWeight(12.3);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        frames,
+        isEmpty,
+        reason: 'the stale attempt must release its snapshot subscription',
+      );
 
-    await frameSub.cancel();
-    controller.dispose();
-    await pending.close();
-  });
+      await frameSub.cancel();
+      controller.dispose();
+      await pending.close();
+    },
+  );
 
-  test('late scale completion cannot replace or detach a newer scale', () async {
-    final controller = ScaleController();
-    final pending = _BlockingScale('scale-old');
-    final replacement = _BlockingScale('scale-new');
+  test(
+    'late scale completion cannot replace or detach a newer scale',
+    () async {
+      final controller = ScaleController();
+      final pending = _BlockingScale('scale-old');
+      final replacement = _BlockingScale('scale-new');
 
-    final oldConnect = controller.connectToScale(pending);
-    await Future<void>.delayed(Duration.zero);
+      final oldConnect = controller.connectToScale(pending);
+      await Future<void>.delayed(Duration.zero);
 
-    replacement.completeConnect();
-    await replacement.onConnect();
-    await controller.adoptScale(replacement);
+      replacement.completeConnect();
+      await replacement.onConnect();
+      await controller.adoptScale(replacement);
 
-    pending.completeConnect();
-    await oldConnect;
+      pending.completeConnect();
+      await oldConnect;
 
-    expect(controller.connectedScaleOrNull, same(replacement));
+      expect(controller.connectedScaleOrNull, same(replacement));
 
-    final nextFrame = controller.weightSnapshot.first;
-    replacement.emitWeight(42.0);
-    expect((await nextFrame).weight, 42.0);
+      final nextFrame = controller.weightSnapshot.first;
+      replacement.emitWeight(42.0);
+      expect((await nextFrame).weight, 42.0);
 
-    controller.dispose();
-    await pending.close();
-    await replacement.close();
-  });
+      controller.dispose();
+      await pending.close();
+      await replacement.close();
+    },
+  );
 }

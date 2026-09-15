@@ -3,19 +3,22 @@ import 'package:reaprime/src/controllers/connection/connection_attempt_owner.dar
 
 void main() {
   group('ConnectionAttemptOwner', () {
-    test('cancelled attempt stays blocked until that exact attempt settles', () {
-      final owner = ConnectionAttemptOwner();
-      final attempt = owner.acquire('AA:BB', automatic: true)!;
+    test(
+      'cancelled attempt stays blocked until that exact attempt settles',
+      () {
+        final owner = ConnectionAttemptOwner();
+        final attempt = owner.acquire('AA:BB', automatic: true)!;
 
-      expect(attempt.mayAdopt, isTrue);
-      expect(attempt.cancel(reason: 'timeout'), isTrue);
-      expect(attempt.mayAdopt, isFalse);
-      expect(owner.isBlocked('aa:bb'), isTrue);
-      expect(owner.acquire('aa:bb'), isNull);
+        expect(attempt.mayAdopt, isTrue);
+        expect(attempt.cancel(reason: 'timeout'), isTrue);
+        expect(attempt.mayAdopt, isFalse);
+        expect(owner.isBlocked('aa:bb'), isTrue);
+        expect(owner.acquire('aa:bb'), isNull);
 
-      expect(attempt.settle(), isTrue);
-      expect(owner.isBlocked('AA:BB'), isFalse);
-    });
+        expect(attempt.settle(), isTrue);
+        expect(owner.isBlocked('AA:BB'), isFalse);
+      },
+    );
 
     test('repeated cancel preserves the first cancellation owner', () {
       final owner = ConnectionAttemptOwner();

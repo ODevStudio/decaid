@@ -2,10 +2,7 @@ class ConnectionAttemptOwner {
   final Map<String, ConnectionAttemptLease> _active = {};
   int _nextGeneration = 0;
 
-  ConnectionAttemptLease? acquire(
-    String deviceId, {
-    bool automatic = false,
-  }) {
+  ConnectionAttemptLease? acquire(String deviceId, {bool automatic = false}) {
     final key = _normalize(deviceId);
     if (_active.containsKey(key)) return null;
 

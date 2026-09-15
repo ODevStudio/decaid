@@ -78,9 +78,9 @@ class BleDiagnosticsHandler {
       devices.map((device) async {
         ConnectionState? state;
         try {
-          state = await device.connectionState.first.timeout(
-            _deviceStateProbeTimeout,
-          );
+          state = await device.connectionState
+              .timeout(_deviceStateProbeTimeout)
+              .first;
         } catch (_) {
           // Diagnostics must stay read-only and bounded even if a device's
           // state stream is currently silent or has failed.

@@ -25,7 +25,9 @@ void main() {
           'generation': 4,
           'nativeIsScanning': false,
         },
-        'cache': [{'deviceId': 'scale-1', 'instanceId': 42}],
+        'cache': [
+          {'deviceId': 'scale-1', 'instanceId': 42},
+        ],
       };
     final devices = DeviceController([ble]);
     await devices.initialize();
@@ -68,10 +70,7 @@ void main() {
       body['ble']['services'][0]['details']['scan']['nativeIsScanning'],
       false,
     );
-    expect(
-      body['ble']['services'][0]['details']['cache'][0]['instanceId'],
-      42,
-    );
+    expect(body['ble']['services'][0]['details']['cache'][0]['instanceId'], 42);
     final peer = body['connection']['peers'].single;
     expect(peer['deviceId'], 'scale-1');
     expect(peer['name'], 'Original Decent Scale');

@@ -65,16 +65,13 @@ void main() {
       false,
     );
     expect(body['ble']['services'][0]['details']['cache'][0]['instanceId'], 42);
-    expect(body['ble']['devices'], [
-      {
-        'deviceId': 'scale-1',
-        'name': 'Original Decent Scale',
-        'type': 'scale',
-        'transport': 'unknown',
-        'instanceId': isA<int>(),
-        'state': 'connected',
-      },
-    ]);
+    final peer = body['ble']['devices'].single;
+    expect(peer['deviceId'], 'scale-1');
+    expect(peer['name'], 'Original Decent Scale');
+    expect(peer['type'], 'scale');
+    expect(peer['transport'], 'unknown');
+    expect(peer['instanceId'], isA<int>());
+    expect(peer['state'], 'connected');
     expect(body['connection']['preferredMachineId'], isNull);
     expect(body['connection']['preferredScaleId'], isNull);
     expect(body['connection']['conditions'], isEmpty);

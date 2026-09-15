@@ -81,10 +81,7 @@ void main() {
     expect(peer['transport'], 'unknown');
     expect(peer['instanceId'], isA<int>());
     expect(peer['state'], 'connected');
-    expect(peer['information'], {
-      'firmwareVersion': '1.1',
-      'batteryLevel': 88,
-    });
+    expect(peer['information'], {'firmwareVersion': '1.1', 'batteryLevel': 88});
     expect(body['connection']['preferredMachineId'], isNull);
     expect(body['connection']['preferredScaleId'], isNull);
     expect(body['connection']['conditions'], isEmpty);
@@ -103,10 +100,7 @@ void main() {
     final ble = MockBleDiscoveryService();
     final devices = DeviceController([ble]);
     await devices.initialize();
-    final scale = _SilentScale(
-      deviceId: 'silent-scale',
-      name: 'Silent Scale',
-    );
+    final scale = _SilentScale(deviceId: 'silent-scale', name: 'Silent Scale');
     ble.addDevice(scale);
     await Future<void>.delayed(Duration.zero);
 

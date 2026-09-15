@@ -65,7 +65,7 @@ void main() {
       false,
     );
     expect(body['ble']['services'][0]['details']['cache'][0]['instanceId'], 42);
-    final peer = body['ble']['devices'].single;
+    final peer = body['connection']['peers'].single;
     expect(peer['deviceId'], 'scale-1');
     expect(peer['name'], 'Original Decent Scale');
     expect(peer['type'], 'scale');

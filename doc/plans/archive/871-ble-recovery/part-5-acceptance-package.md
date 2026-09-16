@@ -16,8 +16,11 @@ is `NOT RUN`; #871, #875, and #877 remain open.
 
 The candidate is reproducibly pinned to published `universal_ble` PR #28 head
 `895aa687a25c99b17c81e8672cac7de051551ded` in both Decaid dependency files.
-Native Android unit tests passed in CI. A candidate Decaid Android app build
-and the physical acceptance matrix remain unrun.
+Native Android unit tests passed in CI. A side-by-side Android APK was built
+from the combined source plus a temporary simulation-isolation overlay and was
+run on a supplemental Samsung tablet. That modified overlay is not the
+published production-source candidate. The production-source Android build and
+the physical acceptance matrix remain unrun.
 
 ## Review result
 
@@ -28,9 +31,10 @@ cancellation-reason, and monotonic-generation state was removed. No second
 watch pause layer, app-global scheduler, global GATT command queue, or new
 dependency was retained.
 
-This result is limited to review, deterministic host tests, and native Android
-CI tests. Candidate Decaid Android app compilation and physical acceptance
-remain open gates. The Linux app compile, package, and launch smoke passed.
+This result is limited to review, deterministic host tests, native Android CI
+tests, and the explicitly supplemental simulation-overlay run below. A
+production-source candidate Android build and physical acceptance remain open
+gates. The Linux app compile, package, and launch smoke passed.
 
 ## Immutable revisions
 
@@ -42,6 +46,8 @@ remain open gates. The Linux app compile, package, and launch smoke passed.
 | Native lifecycle | PR #28 head `895aa687a25c99b17c81e8672cac7de051551ded` | tested merge `e3ddd73beab1bfb1447abb65fad44438239936e6`; CI run `35108117215` |
 | Decaid integration | PR #881 head `88e5d9b492f837eab4471f8451f917123737068e` | tested merge `9d37d7f379b390fa88538113927690ef2ffd807e`; CI run `35112700192` |
 | Combined A+D verification | isolated merge `cb57a614f046949323a570be00034893fe798e2a` with parents D `88e5d9b492f837eab4471f8451f917123737068e` and A `b53d4ba650f1dc15d073b7d728f679ae3db3d142` | tree `ea9d0f3586f462857e013e85c73bb9408a07be1f`; final C pin `895aa687a25c99b17c81e8672cac7de051551ded` |
+| Supplemental Android simulation overlay R2 | combined source `cb57a614f046949323a570be00034893fe798e2a`; uncommitted isolation patch SHA-256 `E6DC3962F58FB7F186F31E90FD065A44F48919C909822E27C31863227C798B54` | isolated package `net.tadel.reaprime.issue871candidate`; APK SHA-256 `A80A5C75B41D6AC23D5B5FF6D27B23B1C1E700E7802DF9E4C6C5D6E22F95D2FC`; resolved lock SHA-256 `E53F5E9F49DFD68052DC2CFF5B1FE73D7DE7C6BBE068646DE7E3E1578E5C27A5`; reported build time `2026-09-16T17:50:48Z` |
+| Supplemental Android simulation overlay R3 | combined source `cb57a614f046949323a570be00034893fe798e2a`; local unpublished MockScale fix `65b9681427c4dd5eed0f29e61cc1c55c3e9eb574`, pending separate publication permission; uncommitted isolation patch SHA-256 `758EAAB735B7F73A00A32DBCAD4799E8510D7456A794A7981E3C49BF3F2A6016` | isolated package `net.tadel.reaprime.issue871candidate`; APK SHA-256 `58DD087785934E3BF3A1866786B308D73B454224953A69AF4F94A72E8C967111`; resolved lock SHA-256 `E53F5E9F49DFD68052DC2CFF5B1FE73D7DE7C6BBE068646DE7E3E1578E5C27A5`; reported build time `2026-09-16T18:40:41Z` |
 | `flutter_js` | `d6e8849210c0081d19c78be97628947e6e2976e2` | unchanged |
 
 Host verification used Windows x64, Flutter 3.44.8, Dart 3.12.2, Gradle
@@ -57,8 +63,73 @@ not substituted for CI or Android hardware results.
 | A: Decaid baseline/diagnostics | Docs-only final-head CI run `35115385053` passed format, analysis, the Linux build smoke, and the full Flutter suite with 4,298 visible passes and one skip; runtime code is unchanged from tested parent `2484d04aefdfa6134344571eb7aeb3f71535d73c` | No affected hardware |
 | B: native admission | Implemented and host-verified: analyze clean; host Flutter suite 136 passed with 13 platform skips | Inspected-head CI is green; affected hardware is unverified |
 | C: native lifecycle | Final head passed analysis and 136 host Flutter tests with 13 platform skips; CI run `35108117215` passed the native Android helper/plugin tests | Host Flutter tests do not validate Kotlin; affected hardware is unverified |
-| D: Decaid integration | Final-head CI run `35112700192` passed format, analysis, the Linux app compile/package/launch smoke, and 4,315 visible Flutter tests with one skip; the local Windows run passed 4,314 with one skip | Candidate Decaid Android app build and affected hardware are unverified; CMake 3.28 and private Microsoft-signed NuGet 7.9 compiled an earlier pre-final Windows candidate revision until `universal_ble_plugin.dll` failed to link with unresolved MSVC `std::bad_cast` symbols, so the simulated REST smoke did not run |
+| D: Decaid integration | Final-head CI run `35112700192` passed format, analysis, the Linux app compile/package/launch smoke, and 4,315 visible Flutter tests with one skip; the local Windows run passed 4,314 with one skip | The production-source candidate Android build and affected hardware are unverified; CMake 3.28 and private Microsoft-signed NuGet 7.9 compiled an earlier pre-final Windows candidate revision until `universal_ble_plugin.dll` failed to link with unresolved MSVC `std::bad_cast` symbols, so the desktop simulated REST smoke did not run |
 | Final A+D combination | Isolated merge passed analysis, 4 focused diagnostic tests, 252 focused connection tests, and the full Windows suite with 4,317 visible passes and one skip | No integration code changes; affected hardware remains unverified |
+| Supplemental Android simulation overlay R2 | APK build, signing, manifest inspection, analysis, the foreground-service test, and the targeted initialization test passed. The targeted TLS plugin tests passed when native QuickJS and Git OpenSSL were on process-local `PATH`. On Samsung `SM-X210` / Android 16, the native launcher and candidate API exposed `MockDe1` and `Mock Scale`; the first connection cycle produced usable machine and scale snapshots. | The overlay changes startup, ports, application ID, and hardware-service isolation and will not be published. Its full suite was not green: 4,306 passed, one skipped, and four failed. One TLS setup failure was environmental and passed in the targeted rerun; three assertions retain production ports `4001`/`8080` while the overlay uses `14001`/`18080`. A second same-process mock reconnect restored connected state and machine snapshots but not scale weight frames. |
+| Supplemental Android simulation overlay R3 | The focused MockScale regression passed 7 tests, analysis was clean, and the rebuilt APK passed signing and package-identity inspection. On the same Samsung tablet, two same-process MockDe1 and MockScale connect/readiness cycles each produced connected inventory, an idle machine snapshot, connected scale status, and a newly received weight frame. | The R3 overlay adds the local unpublished mock-only reconnect fix to R2, pending separate publication permission. It changes startup isolation and provides no physical BLE, DE1, original-scale, HDS, or affected-device evidence. |
+
+## Supplemental Android simulation overlay
+
+R2 and R3 used `simulate=1` and skipped physical BLE, serial/USB, Wi-Fi-scale
+discovery, multicast lock, and Android foreground-service startup. Production
+package `net.tadel.reaprime` stayed running as PID `10742`; the isolated
+candidate used a separate package and API forward. No skin or plugin UI was
+opened. The overlay's missing `ACCESS_NETWORK_STATE` produced nonfatal
+network-info exceptions with localhost fallback, and its unused WebUI tried to
+bind the production-owned port `3000`. Those are overlay limitations and were
+not chased with permission or production changes.
+
+The first bounded cycle connected `MockDe1`; preferred `MockScale` connected in
+the same scan. `GET /api/v1/devices` reported both connected,
+`GET /api/v1/machine/state` returned an idle machine snapshot, and
+`ws/v1/scale/snapshot` returned `{"status":"connected"}` followed by a weight
+frame with weight `0.0`, flow `0.0`, and battery `100`. Native UI showed
+`MockDe1 · idle` and `Mock Scale`. Candidate-only disconnect then reported both
+devices disconnected, the machine-state endpoint returned 500 as documented,
+and the scale socket returned `{"status":"disconnected"}`.
+
+In R2, the second connection cycle did not satisfy the two-success threshold.
+`MockDe1` returned `connected`; `MockScale` returned `alreadyConnected`; the
+device API and native UI showed both connected; and the machine endpoint again
+returned a usable idle snapshot. The scale socket returned only
+`{"status":"connected"}` and no weight frame within eight seconds. Source
+inspection explains the simulation-only result: `MockScale.simulateDisconnect`
+cancels its emission timer and sets `_stalled`, while `onConnect` only publishes
+connected state. No runtime fix was added to the acceptance branch. This is a
+mock reconnect defect, not evidence about physical BLE recovery or HDS
+hardware.
+
+The focused main-based fix at
+`65b9681427c4dd5eed0f29e61cc1c55c3e9eb574` restarts MockScale emission only
+when reconnecting without an active timer. It is local and unpublished pending
+separate publication permission. Its regression failed before the fix, passed
+afterward, and the full main-based suite passed 4,295 tests with one skip. R3
+applied that reviewed diff to the uncommitted isolation overlay. Both
+bounded same-process cycles then reported `MockDe1` and `MockScale` connected,
+returned usable idle machine state, and produced `{"status":"connected"}` plus
+a newly received weight frame. Between cycles both devices reported
+disconnected, machine state returned the documented 500, and the scale socket
+reported `{"status":"disconnected"}`. The candidate was stopped, its `18080`
+ADB forward was removed, and production remained PID `10742`.
+
+Retained runtime evidence includes `candidate-r2-reconnect-app-log.txt`
+(SHA-256 `FD5D6C1E9011524F6D7ABC0708FD3CBA7721AF4468725576DE4057030C2ABABC`),
+`candidate-r2-reconnect-logcat.txt` (SHA-256
+`1C32EC87E4C27FC368C32DEED427AC1710310A9C5FC300899157BD63DA2A7B05`), and
+the connected native screenshots `candidate-r2-cycle1-connected.png` and
+`candidate-r2-cycle2-connected.png` (SHA-256
+`F086686D9A62490B5D5A7D7E2B63052EE0A00CFE0B338E1C4AA8ED75A51E6AF5` and
+`98EF759823B4AD92C614FFFC1BE08E7228E708794E2EED630F2EF9814FBC0389`).
+R3's raw API/WebSocket exchange is retained verbatim from command-output chunks
+`998c12`, `1ddcb3`, `355f6f`, `9100c4`, `89e165`, and `b23845` as
+`candidate-r3-two-cycle-api-ws-transcript.txt` (SHA-256
+`C2EE7C738223318E626AAE2D99AF30F33B95C49EB66809447F5F74EFB154E864`).
+Additional R3 evidence includes `candidate-r3-reconnect-app-log.txt` (SHA-256
+`A3A3CD21A9CA53D22F18978F25222CA6F32AFCFAEF51BF00FB7797B296DF1272`),
+`candidate-r3-reconnect-logcat.txt` (SHA-256
+`1F68379BCEDBE5790014CA0D4DFB317C6725201E67696EFE27FD69CC0742D3A4`), and
+`candidate-r3-cycle2-connected.png` (SHA-256
+`1BDA80FB3DB51F627ADA75DF88801433795664A807FBE8ECD46407C01613C40B`).
 
 The combined run used Flutter 3.44.8 and Dart 3.12.2. Its clean committed tree
 retains final C in both dependency files. Local `pub get` adjusted five
@@ -167,18 +238,18 @@ reported separately from a real controller/radio failure.
 
 | Target | Observation | Coverage |
 | --- | --- | --- |
-| Samsung `SM-X210` tablet | Read-only ADB inventory: Android 16 / SDK 36, build `BP2A.250605.031.A3`, existing `net.tadel.reaprime` version `1.0.0` build 2735 | Inventory only; the running Decaid app was not stopped, launched, changed, or replaced, and no candidate APK was installed |
-| Windows Android toolchain | Android Studio `AI-252.27397.103.2522.14514259`, bundled JetBrains JBR 21.0.8, SDK 36.1.0 at `C:/AndroidSDK` | Toolchain inventory and bounded current-invocation failures only; the normal-daemon comparison did not reach Gradle project configuration, while prior same-JBR local builds and ADB runs succeeded |
-| COM5 HDS USB | `USB-SERIAL CH340K`, WCH, VID/PID `1A86:7522`, revision `0264`; one 12-second passive 115200 8N1 capture received 424 bytes, including 12 ASCII `Weight: 0.00` samples and two health lines | `HARDWARE/TRANSPORT BASELINE`, not candidate app or Android BLE acceptance; no bytes were written, firmware was not reported, reconnect was not exercised, and the port was closed and disposed |
+| Samsung `SM-X210` tablet | Android 16 / SDK 36, build `BP2A.250605.031.A3`; isolated R2 and R3 packages installed and run beside existing `net.tadel.reaprime` version `1.0.0` build 2735 | Supplemental simulation only. R2 exposed the mock-scale reconnect defect; R3 passed two same-process mock machine/scale readiness cycles after the reviewed fix. Production remained PID `10742` and was not stopped, launched, changed, or replaced. No physical BLE was started. |
+| Windows Android toolchain | Android Studio `AI-252.27397.103.2522.14514259`, bundled JetBrains JBR 21.0.8, Temurin JDK 17.0.17, SDK 36.1.0 at `C:/AndroidSDK` | R2 and R3 isolation-overlay APK builds succeeded with Flutter 3.44.8, JDK 17, Gradle 8.14.3, and the recorded process-local selector fallback. Earlier bounded JDK 17 and JBR 21 startup failures at `Selector.open()` remain retained as historical environment provenance. |
+| COM5 HDS USB | `USB-SERIAL CH340K`, WCH, VID/PID `1A86:7522`, revision `0264`; passive 115200 8N1 capture received ASCII `Weight:` and `[health]` output. Two later bounded readiness attempts wrote complete `03 20 01 01` requests after subscribing, drained synchronously, received zero bytes, timed out after two seconds, and released the port. | Harness and desktop transport match on endpoint, 115200 8N1, flow control off, DTR/RTS off, subscription-before-write, and raw-byte routing. The passive stream contained no framed `03 CE` HDS packets. Local scale power/responding state was not independently confirmed during the active attempts, so this is not a hardware-silence conclusion and no further serial retry is authorized without that confirmation. Harness SHA-256: `18414C5E7CDBA809C0231E6F6D82F9948966893196302D82A77919459CDA385C`; provenance SHA-256: `CB3971D116D5F500F504C183A1460E223E24AAEE3A019AFEC4CB4056D7D2A7D6`. |
 
 The tablet is not the affected Android 10/Teclast target and provides no BLE,
 DE1, original-scale, or candidate-build acceptance evidence. COM5 proves only
 that the host can open the HDS USB transport and receive passive scale output.
 No existing Windows runner could exercise `SerialServiceDesktop` without a
-working build of the earlier Windows candidate revision, so the HDS
-enable/readiness path and app-owned reconnect remain unverified. Raw serial
-evidence is
-`com5-hds-passive-baseline.txt` in the evidence directory.
+working build of the earlier Windows candidate revision, so app-owned HDS
+reconnect remains unverified. Raw serial evidence includes
+`com5-hds-passive-baseline.txt`, `hds-hardware-smoke.dart`, and
+`hds-hardware-smoke-provenance.txt` in the evidence directory.
 
 ## Capture and support checklist
 
@@ -247,10 +318,14 @@ GATT clients remain outside the direct-admission guarantee.
   connection suites, analysis, and the full Flutter suite without code changes.
 - Native Android helper/plugin tests: passed in CI run `35108117215`; host
   Flutter tests do not validate Kotlin.
-- Candidate Decaid Android app compilation: unverified; bounded JDK 17 and JBR
-  21 invocations against earlier candidate revisions failed at
-  `Selector.open()` before Gradle project configuration, while prior same-JBR
-  local builds and ADB tablet runs succeeded.
+- Candidate Decaid Android app compilation: the isolated R2 and R3 simulation
+  overlays compiled, installed, and launched. The production-source candidate
+  build remains unverified; bounded JDK 17 and JBR 21 invocations against earlier
+  candidate revisions failed at `Selector.open()` before Gradle project
+  configuration.
+- Supplemental runtime: R2 exposed missing mock-scale emission after reconnect.
+  R3 passed the requested two same-process mock machine/scale readiness cycles
+  after the focused fix. This does not close a physical acceptance row.
 - Exact candidate dependency pin: satisfied at published PR #28 head
   `895aa687a25c99b17c81e8672cac7de051551ded`.
 - Affected-device matrix: `NOT RUN`.

@@ -130,16 +130,19 @@ class BleDiagnosticsHandler {
 
   Future<List<Map<String, Object?>>> _startServiceDiagnosticsCollection() {
     late final Future<List<Map<String, Object?>>> future;
-    future = deviceController.bleDiagnostics().then((services) {
-      final snapshot = List<Map<String, Object?>>.unmodifiable(services);
-      _lastServicesDiagnostics = snapshot;
-      _lastServicesDiagnosticsAt = DateTime.now().toUtc();
-      return snapshot;
-    }).whenComplete(() {
-      if (identical(_servicesDiagnosticsInFlight, future)) {
-        _servicesDiagnosticsInFlight = null;
-      }
-    });
+    future = deviceController
+        .bleDiagnostics()
+        .then((services) {
+          final snapshot = List<Map<String, Object?>>.unmodifiable(services);
+          _lastServicesDiagnostics = snapshot;
+          _lastServicesDiagnosticsAt = DateTime.now().toUtc();
+          return snapshot;
+        })
+        .whenComplete(() {
+          if (identical(_servicesDiagnosticsInFlight, future)) {
+            _servicesDiagnosticsInFlight = null;
+          }
+        });
     _servicesDiagnosticsInFlight = future;
     return future;
   }

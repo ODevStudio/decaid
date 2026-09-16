@@ -249,6 +249,36 @@ application connection applies defaults and uploads the selected workflow
 profile. That connection remains pending explicit approval of these effects;
 the protected Decaid installation has not been changed.
 
+### Separate hardware candidate startup
+
+A new local-only candidate based on combined A+D `cb57a614` built, installed,
+and cold-launched successfully on the Samsung. Unlike R2/R3, it retains the
+original main/startup, foreground-service, Bluetooth permission, discovery,
+and transport code, and does not include the unpublished MockScale fix.
+Its isolation changes are the application ID/label and matching Google
+package configuration, plus API/docs/WebUI ports 18081/14002/13001. It uses
+the existing `simulate=0` real-hardware debug mode, which creates no simulated
+devices and disables Dart Firebase/telemetry initialization. This is still a
+modified debug candidate, not the unmodified release APK above.
+
+Analysis passed after staging the existing plugin bundles and CI-style skin
+stub. The initial analysis and first build reported missing bundle directories;
+the final build completed without those errors. Candidate API devices and BLE
+diagnostics returned HTTP 200. Inventory was empty and diagnostics showed no
+active scan/watch or connection. Onboarding and peripheral connection were
+not advanced, so foreground-service operation and BLE readiness are not yet
+validated. No skin was opened. The candidate was stopped and its sole ADB
+forward removed. Production was already not running at preflight; it was not
+started or stopped. Its installed code path, version 2735, and update time
+were unchanged afterward.
+
+Package: `net.tadel.reaprime.issue871hardware`. APK SHA-256:
+`0E9A74192410B7876C13426372A1D1ADBAAF76AD6AC4B237A5BB514D25CAAC87`.
+Unpublished isolation patch including resolved-lock changes SHA-256:
+`4053A064EDB7A5BD23FAB9660D73E8FF2CCE4C6857C58A87AD562CAB8F2625CA`.
+Raw evidence uses the `hardware-direct-*` prefix in the same evidence
+directory. The app remains installed separately for the approved hardware run.
+
 ## Fixed comparison contract
 
 Baseline and candidate must use identical current scale behavior:

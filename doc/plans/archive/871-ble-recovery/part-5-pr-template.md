@@ -25,6 +25,13 @@ has not run.
   All weights were zero; changing-load accuracy was not tested. This is USB
   protocol evidence, not affected-device BLE acceptance. Raw transcript hash:
   `AB6BD76A706AD67E88EA683A8CAB3BD6FCB64B59F558771785C6432A2F0438DD`.
+- A separate real-hardware debug candidate based on combined A+D built,
+  analyzed cleanly, installed, cold-launched, and answered device/diagnostic
+  API reads on Samsung. It retains the real startup/BLE/foreground-service
+  code, with package/port isolation and existing `simulate=0` mode. It includes
+  no MockScale fix. No scan or connection was started; Bengle's normal
+  settings/profile application awaits approval. The candidate was stopped
+  and its forward removed; the production installation was unchanged.
 
 - Block A docs-only final head `b53d4ba650f1dc15d073b7d728f679ae3db3d142`:
   CI run `35115385053` passed format, analysis, the Linux build smoke, and the

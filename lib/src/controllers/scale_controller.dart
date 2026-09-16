@@ -61,6 +61,13 @@ class ScaleController {
         );
       }
     }
+    if (generation != _connectionGeneration) {
+      log.fine(
+        'Ignoring stale scale connect before starting ${scale.deviceId} '
+        '(attempt=$generation, current=$_connectionGeneration)',
+      );
+      return;
+    }
     final snapshotSubscription = scale.currentSnapshot.listen(_processSnapshot);
     _scaleSnapshot = snapshotSubscription;
     try {

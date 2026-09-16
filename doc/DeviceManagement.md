@@ -544,6 +544,11 @@ owners before publishing that state. Other failed cleanup remains blocked until
 the manager restarts. Cancellation is checked again after an asynchronous
 scale-watch stop and before either device source starts.
 
+A retained primary-scale lease remains the active primary claim during
+auxiliary admission. A timed-out primary blocks same-device auxiliary
+`onConnect()` even when the identifier casing differs. An unrelated auxiliary
+device can still connect.
+
 Cancellation follows the initiating owner. Cancelling a scan affects only its
 early connects, USB attach supersedes only an automatic machine attempt,
 adapter loss affects only BLE attempts, explicit disconnect affects the

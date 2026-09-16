@@ -122,6 +122,11 @@ stays reserved; restarting the manager is the non-BLE recovery route. After an
 asynchronous scale-watch stop, the lease is checked again before the machine or
 scale source starts.
 
+A retained primary-scale lease also counts as the active primary claim during
+auxiliary admission. A timed-out primary therefore blocks same-device
+auxiliary `onConnect()` even when the identifier uses different casing, while
+an unrelated auxiliary device remains eligible.
+
 Remembered-machine quick connect has no shorter host wrapper timeout around
 `device.onConnect()`. The transport owns its native deadline, while Decaid owns
 the single retry for a real `BleConnectException`. Direct connects disarm the
@@ -141,11 +146,13 @@ Cancel (launcher) and route-back interception both route through
 and proceeds with partial results — that is a different action, not
 cancellation.
 
-The reviewed Android direct-admission/lifecycle candidate ends at local fork
-commit `546d55bbaef7f750c570b88d8c797299fc01335a`. Until that revision is
-published, Decaid remains reproducibly pinned to
-`16bbfbce197eb5913c6b16578363f7dc943e605d`; do not hand-edit the lockfile or
-pin the uncorrected upstream PR head.
+The reviewed Android direct-admission/lifecycle candidate is published at
+`universal_ble` PR #28 head
+`895aa687a25c99b17c81e8672cac7de051551ded`, stacked on PR #25 head
+`a5cc8dd727a2f7da6822eccdc968038839fe0bb9`. Decaid pins that exact PR #28
+revision in both dependency files. CI run `35108117215` passed the native
+Android helper/plugin tests on tested merge
+`e3ddd73beab1bfb1447abb65fad44438239936e6`.
 
 ## Footgun #1: GATT-133 on Cold Boot
 

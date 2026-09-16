@@ -14,62 +14,77 @@ affected-device recovery. The required Android 10/Teclast tablet, DE1, and
 original full-height Decent Scale are unavailable. Every physical result below
 is `NOT RUN`; #871, #875, and #877 remain open.
 
-The candidate cannot yet be built reproducibly from the Decaid dependency pin.
-The corrected fork tree exists only as local commit
-`546d55bbaef7f750c570b88d8c797299fc01335a`. Decaid therefore remains pinned to
-published baseline `16bbfbce197eb5913c6b16578363f7dc943e605d` rather than a
-non-fetchable commit or the uncorrected PR #28 head.
+The candidate is reproducibly pinned to published `universal_ble` PR #28 head
+`895aa687a25c99b17c81e8672cac7de051551ded` in both Decaid dependency files.
+Native Android unit tests passed in CI. A candidate Decaid Android app build
+and the physical acceptance matrix remain unrun.
 
 ## Review result
 
-No known host-test correctness defect remains in the locally reviewed A
+No known deterministic-test correctness defect remains in the reviewed A
 through D software diffs. The Decaid correction reuses controller and `ScaleWatch`
 generation fences and adds only one device-id lease owner. Unused diagnostic,
 cancellation-reason, and monotonic-generation state was removed. No second
 watch pause layer, app-global scheduler, global GATT command queue, or new
 dependency was retained.
 
-This result is limited to review and deterministic host tests. Dependency
-publication, Android compilation, and physical acceptance remain open gates.
+This result is limited to review, deterministic host tests, and native Android
+CI tests. Candidate Decaid Android app compilation and physical acceptance
+remain open gates. The Linux app compile, package, and launch smoke passed.
 
 ## Immutable revisions
 
 | Component | Baseline or inspected revision | Reviewed candidate |
 | --- | --- | --- |
-| Decaid main | `4d522443aaa4dc6470dcf56e9df61c4426fbeaf6` | same base |
-| Baseline and diagnostics | PR #878 `dae28ac16a30a221f65e7a9216317e15f57d7f86` | local correction `4540b730d20a23f4c80321337a1c28bac072420c` |
-| Native admission | fork baseline `16bbfbce197eb5913c6b16578363f7dc943e605d` | PR #25 `f61b5666e8b3542a043b2f0da8056b70d97da0df` |
-| Native lifecycle | PR #28 `1dca59494a684dbb6007e3b2819e7e11ee0ae987` | local correction `546d55bbaef7f750c570b88d8c797299fc01335a` |
-| Decaid integration | PR #881 `c9a22221dd08f9f42f261d9b628fa7d782ed3f23` | local correction `e91619d70235b5b09f010fb8f4f6011fe173b994` |
-| Integrated verification | Block A plus Block D | local tree `ff4ab5a779954154aadc2b9ed74cb075af7ad825`, advanced from reviewed tree `7b97ef783d28773d9a1db42c562eb6f2ad68cac2`, with ignored local fork override |
+| Decaid main | `f181612dacf47fa58d2eb3dac6f8aab343946f5a` | tested D merge parent |
+| Baseline and diagnostics | PR #878 runtime head `2484d04aefdfa6134344571eb7aeb3f71535d73c`; docs-only archive follow-up `b53d4ba650f1dc15d073b7d728f679ae3db3d142` | follow-up CI run `35115385053` |
+| Native admission | fork baseline `16bbfbce197eb5913c6b16578363f7dc943e605d` | PR #25 head `a5cc8dd727a2f7da6822eccdc968038839fe0bb9` |
+| Native lifecycle | PR #28 head `895aa687a25c99b17c81e8672cac7de051551ded` | tested merge `e3ddd73beab1bfb1447abb65fad44438239936e6`; CI run `35108117215` |
+| Decaid integration | PR #881 head `88e5d9b492f837eab4471f8451f917123737068e` | tested merge `9d37d7f379b390fa88538113927690ef2ffd807e`; CI run `35112700192` |
+| Combined A+D verification | isolated merge `cb57a614f046949323a570be00034893fe798e2a` with parents D `88e5d9b492f837eab4471f8451f917123737068e` and A `b53d4ba650f1dc15d073b7d728f679ae3db3d142` | tree `ea9d0f3586f462857e013e85c73bb9408a07be1f`; final C pin `895aa687a25c99b17c81e8672cac7de051551ded` |
 | `flutter_js` | `d6e8849210c0081d19c78be97628947e6e2976e2` | unchanged |
 
 Host verification used Windows x64, Flutter 3.44.8, Dart 3.12.2, Gradle
 8.14.3, Kotlin 2.3.21, compile SDK 36, target SDK 35, and minimum SDK 28.
-Android startup probes used both Temurin JDK 17.0.17 and Android Studio's
-JetBrains JBR 21.0.8. CI uses Flutter 3.44.2; host results are not substituted
-for CI or Android hardware results.
+Earlier pre-final Android startup probes used both Temurin JDK 17.0.17 and
+Android Studio's JetBrains JBR 21.0.8. CI uses Flutter 3.44.2; host results are
+not substituted for CI or Android hardware results.
 
 ## Software evidence
 
 | Block | Result | Limits |
 | --- | --- | --- |
-| A: Decaid baseline/diagnostics | Implemented and host-verified: analyze clean; focused tests 5/5 and 4/4; full Flutter suite 4,255 passed with one skip | No affected hardware |
-| B: native admission | Implemented and host-verified: analyze clean; host Flutter suite 136 passed with 13 platform skips | Inspected-head CI is green; local Android compilation is unverified |
-| C: native lifecycle | Implemented and host-verified at local correction `546d55bbaef7f750c570b88d8c797299fc01335a`: analyze clean; 136 host tests passed with 13 platform skips | Android-unverified; CI covers the uncorrected PR head, not the local correction |
-| D: Decaid integration | Implemented and candidate-verified against local C: analyze clean; focused suites 215 and 59 passed; final integrated suite passed 4,274 tests with one skip | Android-unverified; CMake 3.28 and private Microsoft-signed NuGet 7.9 configured and compiled the Windows candidate until `universal_ble_plugin.dll` failed to link with unresolved MSVC `std::bad_cast` symbols; the simulated REST smoke did not run |
+| A: Decaid baseline/diagnostics | Docs-only final-head CI run `35115385053` passed format, analysis, the Linux build smoke, and the full Flutter suite with 4,298 visible passes and one skip; runtime code is unchanged from tested parent `2484d04aefdfa6134344571eb7aeb3f71535d73c` | No affected hardware |
+| B: native admission | Implemented and host-verified: analyze clean; host Flutter suite 136 passed with 13 platform skips | Inspected-head CI is green; affected hardware is unverified |
+| C: native lifecycle | Final head passed analysis and 136 host Flutter tests with 13 platform skips; CI run `35108117215` passed the native Android helper/plugin tests | Host Flutter tests do not validate Kotlin; affected hardware is unverified |
+| D: Decaid integration | Final-head CI run `35112700192` passed format, analysis, the Linux app compile/package/launch smoke, and 4,315 visible Flutter tests with one skip; the local Windows run passed 4,314 with one skip | Candidate Decaid Android app build and affected hardware are unverified; CMake 3.28 and private Microsoft-signed NuGet 7.9 compiled an earlier pre-final Windows candidate revision until `universal_ble_plugin.dll` failed to link with unresolved MSVC `std::bad_cast` symbols, so the simulated REST smoke did not run |
+| Final A+D combination | Isolated merge passed analysis, 4 focused diagnostic tests, 252 focused connection tests, and the full Windows suite with 4,317 visible passes and one skip | No integration code changes; affected hardware remains unverified |
 
-The bounded JDK 17 selector probe failed after setting a short process-scoped
-`jdk.net.unixdomain.tmpdir`, reaching `UnixDomainSockets.connect0` with
+The combined run used Flutter 3.44.8 and Dart 3.12.2. Its clean committed tree
+retains final C in both dependency files. Local `pub get` adjusted five
+Flutter-SDK-pinned transitive packages without changing that C ref. The exact
+resolved lock is retained as `pubspec.resolved-flutter-3.44.8.lock` (SHA-256
+`E53F5E9F49DFD68052DC2CFF5B1FE73D7DE7C6BBE068646DE7E3E1578E5C27A5`) and
+the dependency graph as `pub-deps-flutter-3.44.8.json` (SHA-256
+`0C5692596C641B0A13212590A85A0CA76BDF3C2F179274B388FE47264CA8305D`). Raw
+results are `focused-diagnostics.ndjson`, `focused-connection.ndjson`, and
+`full-tests-green.ndjson` in the combined evidence directory.
+
+The local Dart 3.12.2 format check reported ten pre-existing formatter
+differences. Both final PR CI heads pass their Flutter 3.44.2 format checks, so
+the verification branch leaves those unrelated files unchanged.
+
+The earlier bounded JDK 17 selector probe failed after setting a short
+process-scoped `jdk.net.unixdomain.tmpdir`, reaching
+`UnixDomainSockets.connect0` with
 `Invalid argument: connect`. Android Studio's materially different JetBrains
 JBR 21.0.8 also failed in the current environment during both the initial
 `gradle help --no-daemon` invocation and an independent `Selector.open()`
 probe.
 
-One follow-up comparison used the corrected fork C worktree at
-`546d55bbaef7f750c570b88d8c797299fc01335a`, cached Gradle 8.14.3, Studio JBR
-21, the normal persistent-daemon path, and only the prior Kotlin settings as
-per-invocation properties:
+Before final C publication, one follow-up comparison used its predecessor
+worktree, cached Gradle 8.14.3, Studio JBR 21, the normal persistent-daemon
+path, and only the prior Kotlin settings as per-invocation properties:
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
@@ -88,8 +103,8 @@ accepted the client connection. The client and daemon then failed while
 constructing the connection stream because `Selector.open()` could not
 establish its internal loopback pipe. The daemon exited, project configuration
 was not reached, and the native test task did not execute. Per the bounded stop
-condition, the integrated candidate build was not attempted. Raw client and
-daemon output is retained in `android-normal-daemon-c-native-tests.txt` and
+condition, that earlier integrated candidate build was not attempted. Raw
+client and daemon output is retained in `android-normal-daemon-c-native-tests.txt` and
 `android-normal-daemon-22264.log`.
 
 These failures describe only the tested invocations in the current process
@@ -98,7 +113,7 @@ Android. Local Decaid builds and ADB tablet runs succeeded in August 2026 with
 the same Android Studio JBR 21 and a persistent Gradle daemon, including
 `flutter run --profile -d R9TX60JBR5T --dart-define=simulate=replay`. The prior
 artifacts use production application ID `net.tadel.reaprime`, do not contain
-the corrected issue #871 candidate, and were not installed. Comparison details
+the final issue #871 candidate, and were not installed. Comparison details
 are retained in `android-prior-workflow-comparison.txt`.
 
 ## Fixed comparison contract
@@ -107,8 +122,8 @@ Baseline and candidate must use identical current scale behavior:
 `displayOff` sends shared `0A 00` and preserves a healthy original-scale link.
 Explicit disconnect power mode is a separate scenario. The only A/B dependency
 variable is published baseline `universal_ble`
-`16bbfbce197eb5913c6b16578363f7dc943e605d` versus the final published form of
-candidate `546d55bbaef7f750c570b88d8c797299fc01335a`.
+`16bbfbce197eb5913c6b16578363f7dc943e605d` versus published candidate
+`895aa687a25c99b17c81e8672cac7de051551ded`.
 
 For each recovery episode, record peripheral availability and fresh adverts;
 request, admission, native callback, and protocol-ready timestamps; native
@@ -159,29 +174,35 @@ reported separately from a real controller/radio failure.
 The tablet is not the affected Android 10/Teclast target and provides no BLE,
 DE1, original-scale, or candidate-build acceptance evidence. COM5 proves only
 that the host can open the HDS USB transport and receive passive scale output.
-No existing Windows runner could exercise `SerialServiceDesktop` without the
-blocked app build, so the HDS enable/readiness path and app-owned reconnect
-remain unverified. Raw serial evidence is
+No existing Windows runner could exercise `SerialServiceDesktop` without a
+working build of the earlier Windows candidate revision, so the HDS
+enable/readiness path and app-owned reconnect remain unverified. Raw serial
+evidence is
 `com5-hds-passive-baseline.txt` in the evidence directory.
 
 ## Capture and support checklist
 
+Use this checklist only for a coordinated test build on a designated test
+device. Confirm the test-device serial and an isolated candidate application ID
+before capture. Do not target or replace the protected running installation.
+
 1. Record Decaid and fork commits, resolved lockfile refs, tablet model, Android
    build fingerprint, DE1 firmware, scale firmware, power mode, foreground
    state, screen state, and whether both devices reached protocol readiness.
-2. Clear logcat immediately before a bounded run, then retain native and Dart
-   logs with monotonic ordering where available:
+2. Start a read-only live native-log capture before the coordinated run, stop
+   it after the bounded run, and do not clear tablet-wide logcat:
 
    ```powershell
-   adb logcat -c
-   adb logcat -v threadtime > native-logcat.txt
+   $serial='<designated-test-serial>'
+   $appId='<verified-isolated-candidate-app-id>'
+   adb -s $serial logcat -v threadtime -T 1 > native-logcat.txt
    ```
 
 3. Save Decaid logs through the in-app Export logs action or, on a debuggable
    build, with:
 
    ```powershell
-   adb shell run-as net.tadel.reaprime cat app_flutter/log.txt > decaid-log.txt
+   adb -s $serial shell run-as $appId cat app_flutter/log.txt > decaid-log.txt
    ```
 
 4. Capture `GET /api/v1/diagnostics/ble` before the run, at every failure, and
@@ -197,9 +218,8 @@ remain unverified. Raw serial evidence is
 
 ## Rollback package
 
-No candidate release should be made while the corrected fork revision is
-unpublished and the physical matrix is unrun. If a later candidate build must
-be rolled back:
+No candidate release should be made while the physical matrix is unrun. If a
+later candidate build must be rolled back:
 
 1. Stop rollout and retain the failing build, its exact lockfile, app logs,
    native logcat, and BLE diagnostic snapshots.
@@ -221,13 +241,18 @@ GATT clients remain outside the direct-admission guarantee.
 
 ## Sign-off state
 
-- Prerequisite software reviews: implemented locally and host-verified; the
-  integrated Decaid tree is candidate-verified against local corrected fork C.
-- Corrected-fork and candidate-app Android compilation: unverified; the
-  bounded current JDK 17 and JBR 21 invocations failed at `Selector.open()`
-  before Gradle project configuration, while prior same-JBR local builds and
-  ADB tablet runs succeeded.
-- Exact candidate dependency pin: blocked by unpublished corrected fork commit.
+- Prerequisite software reviews: final A through D heads are reviewed and their
+  recorded CI runs are green.
+- Final A+D combination: isolated merge passed focused diagnostics, focused
+  connection suites, analysis, and the full Flutter suite without code changes.
+- Native Android helper/plugin tests: passed in CI run `35108117215`; host
+  Flutter tests do not validate Kotlin.
+- Candidate Decaid Android app compilation: unverified; bounded JDK 17 and JBR
+  21 invocations against earlier candidate revisions failed at
+  `Selector.open()` before Gradle project configuration, while prior same-JBR
+  local builds and ADB tablet runs succeeded.
+- Exact candidate dependency pin: satisfied at published PR #28 head
+  `895aa687a25c99b17c81e8672cac7de051551ded`.
 - Affected-device matrix: `NOT RUN`.
 - Maintainer hardware sign-off: pending.
 - #871, #875, and #877: remain open.

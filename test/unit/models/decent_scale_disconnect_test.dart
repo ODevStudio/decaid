@@ -377,7 +377,9 @@ void _elapse(FakeAsync async, Duration duration) {
   async.flushMicrotasks();
   _elapse(async, const Duration(milliseconds: 100));
   expect(transport.connectCalls, connectsBefore + 1);
-  expect(transport.writes, isEmpty);
+  expect(transport.writes, [
+    [0x03, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x09],
+  ]);
   return (scale: scale, transport: transport);
 }
 

@@ -17,9 +17,9 @@ acceptance.
 
 - `dart format` completed for the changed Dart files.
 - `flutter analyze --no-pub`: no issues.
-- Focused connection ownership, USB attach, discovery, and controller suites:
-  281 passed.
-- Full `flutter test --no-pub`: 4,727 passed, one existing skip.
+- Post-merge focused connection ownership, auxiliary-scale, USB attach,
+  discovery, and controller suites: 325 passed.
+- Post-merge full `flutter test --no-pub`: 4,772 passed, one existing skip.
 - `universal_ble` PR #28 run `35108117215`: all jobs passed on merge
   `e3ddd73beab1bfb1447abb65fad44438239936e6`, including
   `gradle :universal_ble:testDebugUnitTest` for exact head

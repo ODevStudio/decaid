@@ -19,6 +19,7 @@ import 'package:reaprime/src/controllers/connection_error.dart';
 import 'package:reaprime/src/controllers/de1_controller.dart';
 import 'package:reaprime/src/controllers/remembered_devices_controller.dart';
 import 'package:reaprime/src/controllers/scale_controller.dart';
+import 'package:reaprime/src/controllers/auxiliary_scale_registry.dart';
 import 'package:reaprime/src/models/device/bengle_interface.dart';
 import 'package:reaprime/src/models/device/de1_interface.dart';
 import 'package:reaprime/src/models/device/transport/ble_connect_exception.dart';
@@ -119,6 +120,7 @@ class ConnectionManager {
   final DeviceScanner deviceScanner;
   final De1Controller de1Controller;
   final ScaleController scaleController;
+  final AuxiliaryScaleRegistry auxiliaryScaleRegistry;
   final SettingsController settingsController;
 
   final RememberedDevicesController? rememberedDevices;
@@ -139,6 +141,7 @@ class ConnectionManager {
   bool _isConnecting = false;
   bool _isConnectingMachine = false;
   bool _isConnectingScale = false;
+  final Set<String> _primaryScaleClaims = {};
   bool _activeScaleOnlyScan = false;
   bool _shuttingDown = false;
   Future<void>? _shutdownFuture;
@@ -262,11 +265,14 @@ class ConnectionManager {
     required this.deviceScanner,
     required this.de1Controller,
     required this.scaleController,
+    AuxiliaryScaleRegistry? auxiliaryScaleRegistry,
     required this.settingsController,
     this.rememberedDevices,
     Duration deviceAttachSettleDelay = const Duration(milliseconds: 500),
     Duration? connectTimeout,
-  }) : _connectTimeout =
+  }) : auxiliaryScaleRegistry =
+           auxiliaryScaleRegistry ?? AuxiliaryScaleRegistry(),
+       _connectTimeout =
            connectTimeout ??
            (Platform.isLinux
                ? const Duration(seconds: 60)
@@ -1753,6 +1759,9 @@ class ConnectionManager {
       _log.fine('Scale already connected, skipping scale phase');
       return;
     }
+    scales = scales
+        .where((scale) => !auxiliaryScaleRegistry.isReserved(scale.deviceId))
+        .toList();
     _log.fine(
       'Scale phase: ${scales.length} scales, preferredScaleId=$preferredScaleId',
     );
@@ -2013,11 +2022,19 @@ class ConnectionManager {
     }
   }
 
-  Future<ConnectionResult> connectScale(Scale scale) =>
-      _connectScaleRequest(scale);
+  bool _isPrimaryScaleClaimed(String deviceId) =>
+      _primaryScaleClaims.contains(deviceId) ||
+      (scaleController.currentConnectionState == ConnectionState.connected &&
+          scaleController.lastConnectedDeviceId == deviceId);
+
+  Future<ConnectionResult> connectScale(
+    Scale scale, {
+    ScaleConnectionRole role = ScaleConnectionRole.primary,
+  }) => _connectScaleRequest(scale, role: role);
 
   Future<ConnectionResult> _connectScaleRequest(
     Scale scale, {
+    ScaleConnectionRole role = ScaleConnectionRole.primary,
     bool scanOwned = false,
     bool disarmWatch = true,
   }) {
@@ -2025,9 +2042,28 @@ class ConnectionManager {
       return Future.value(const ConnectionResult.conflict());
     }
     return _trackConnectionWork(
-      () =>
-          _connectScale(scale, scanOwned: scanOwned, disarmWatch: disarmWatch),
+      () => role == ScaleConnectionRole.auxiliary
+          ? _connectAuxiliaryScale(scale)
+          : _connectScale(
+              scale,
+              scanOwned: scanOwned,
+              disarmWatch: disarmWatch,
+            ),
     );
+  }
+
+  Future<ConnectionResult> _connectAuxiliaryScale(Scale scale) async {
+    if (_isPrimaryScaleClaimed(scale.deviceId)) {
+      return const ConnectionResult.conflict();
+    }
+    try {
+      return await auxiliaryScaleRegistry
+          .connect(scale, isPrimaryClaimed: _isPrimaryScaleClaimed)
+          .timeout(_connectTimeout);
+    } on TimeoutException catch (error) {
+      auxiliaryScaleRegistry.cancelPending(scale.deviceId);
+      return ConnectionResult.timedOut(error.toString());
+    }
   }
 
   Future<ConnectionResult> _connectScale(
@@ -2050,6 +2086,9 @@ class ConnectionManager {
       );
       return const ConnectionResult.conflict();
     }
+    if (auxiliaryScaleRegistry.isReserved(scale.deviceId)) {
+      return const ConnectionResult.conflict();
+    }
     final attempt = _connectionAttempts.acquire(
       scale.deviceId,
       role: ConnectionAttemptRole.scale,
@@ -2057,6 +2096,7 @@ class ConnectionManager {
       ble: scale.transportType == TransportType.ble,
     );
     if (attempt == null) return const ConnectionResult.conflict();
+    _primaryScaleClaims.add(scale.deviceId);
     _isConnectingScale = true;
     var sourceStarted = false;
     _log.fine('connectScale: connecting to ${scale.name} (${scale.deviceId})');
@@ -2157,6 +2197,7 @@ class ConnectionManager {
           : ConnectionResult.failed(e.toString());
     } finally {
       if (!sourceStarted) attempt.settle();
+      _primaryScaleClaims.remove(scale.deviceId);
       _isConnectingScale = false;
     }
   }
@@ -2220,6 +2261,12 @@ class ConnectionManager {
       _log.fine(
         'Skipping external scale early-connect while machine is sleeping '
         'and scale power mode is disconnect',
+      );
+      return;
+    }
+    if (auxiliaryScaleRegistry.isReserved(scale.deviceId)) {
+      _log.fine(
+        'Skipping external scale early-connect because it is auxiliary',
       );
       return;
     }
@@ -2415,6 +2462,11 @@ class ConnectionManager {
       await disconnectScale();
     } catch (error, stackTrace) {
       _log.warning('Scale disconnect failed', error, stackTrace);
+    }
+    try {
+      await auxiliaryScaleRegistry.dispose();
+    } catch (error, stackTrace) {
+      _log.warning('Auxiliary scale shutdown failed', error, stackTrace);
     }
   }
 

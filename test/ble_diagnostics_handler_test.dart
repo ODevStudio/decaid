@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reaprime/src/controllers/connection_manager.dart';
@@ -10,6 +11,7 @@ import 'package:reaprime/src/models/device/device.dart';
 import 'package:reaprime/src/services/webserver/ble_diagnostics_handler.dart';
 import 'package:reaprime/src/settings/settings_controller.dart';
 import 'package:shelf_plus/shelf_plus.dart';
+import 'package:yaml/yaml.dart';
 
 import 'helpers/mock_device_discovery_service.dart';
 import 'helpers/mock_settings_service.dart';
@@ -201,6 +203,20 @@ void main() {
       ble.dispose();
     },
   );
+
+  test('OpenAPI documents BLE diagnostic correlation fields', () async {
+    final spec =
+        loadYaml(await File('assets/api/rest_v1.yml').readAsString())
+            as YamlMap;
+    final schemas = (spec['components'] as YamlMap)['schemas'] as YamlMap;
+    final schema = schemas['BleDiagnosticsSnapshot'] as YamlMap;
+    final required = schema['required'] as YamlList;
+    final properties = schema['properties'] as YamlMap;
+
+    expect(required, containsAll(['diagnosticsVersion', 'monotonicMs']));
+    expect((properties['diagnosticsVersion'] as YamlMap)['enum'], contains(2));
+    expect((properties['monotonicMs'] as YamlMap)['type'], 'integer');
+  });
 }
 
 class _InfoScale extends TestScale implements DeviceInformationCapable {

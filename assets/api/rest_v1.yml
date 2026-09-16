@@ -5506,11 +5506,17 @@ components:
           description: Optional plugin error code, including unsupported_operation.
     BleDiagnosticsSnapshot:
       type: object
-      required: [timestamp, ble, connection]
+      required: [diagnosticsVersion, timestamp, monotonicMs, ble, connection]
       properties:
+        diagnosticsVersion:
+          type: integer
+          enum: [2]
         timestamp:
           type: string
           format: date-time
+        monotonicMs:
+          type: integer
+          minimum: 0
         ble:
           type: object
           additionalProperties: true

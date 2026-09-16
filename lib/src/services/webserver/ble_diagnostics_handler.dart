@@ -156,10 +156,7 @@ class BleDiagnosticsHandler {
           state = await device.connectionState
               .timeout(deviceStateProbeTimeout)
               .first;
-        } catch (_) {
-          // Diagnostics must stay read-only and bounded even if a device's
-          // state stream is currently silent or has failed.
-        }
+        } catch (_) {}
 
         final information = device is DeviceInformationCapable
             ? (device as DeviceInformationCapable).currentDeviceInformation

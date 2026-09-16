@@ -67,4 +67,4 @@ has not run.
 
 - [x] I have reviewed and understand all changes in this PR and take
   responsibility for their correctness, security, behavior, licensing, and
-  provenance, including any AI-assisted or AI-generated work.
+  provenance, including any AI-assisted or AI-generated work. <!-- contributor-responsibility -->

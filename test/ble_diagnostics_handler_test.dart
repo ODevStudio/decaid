@@ -167,11 +167,9 @@ void main() {
 
       Request request() =>
           Request('GET', Uri.parse('http://localhost/api/v1/diagnostics/ble'));
+      Future<Response> call() async => router.call(request());
 
-      final responses = await Future.wait([
-        router.call(request()),
-        router.call(request()),
-      ]);
+      final responses = await Future.wait<Response>([call(), call()]);
       expect(ble.diagnosticsCallCount, 1);
 
       for (final response in responses) {

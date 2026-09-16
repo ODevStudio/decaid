@@ -2023,6 +2023,7 @@ class ConnectionManager {
   }
 
   bool _isPrimaryScaleClaimed(String deviceId) =>
+      _connectionAttempts.owns(deviceId, role: ConnectionAttemptRole.scale) ||
       _primaryScaleClaims.contains(deviceId) ||
       (scaleController.currentConnectionState == ConnectionState.connected &&
           scaleController.lastConnectedDeviceId == deviceId);

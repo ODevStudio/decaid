@@ -32,6 +32,11 @@ class ConnectionAttemptOwner {
   Iterable<ConnectionAttemptLease> get active =>
       List.unmodifiable(_active.values);
 
+  bool owns(String deviceId, {ConnectionAttemptRole? role}) {
+    final attempt = _active[_normalize(deviceId)];
+    return attempt != null && (role == null || attempt.role == role);
+  }
+
   bool _cancel(ConnectionAttemptLease lease) {
     if (!_isCurrent(lease) || lease._cancelled) return false;
     lease._cancelled = true;

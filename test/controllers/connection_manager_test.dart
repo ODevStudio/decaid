@@ -2424,6 +2424,25 @@ void main() {
 
         final result = await connectionManager.connectScale(scale);
         expect(result.outcome, ConnectionOutcome.timedOut);
+        final duplicateAuxiliary = _CountingScale(deviceId: 'RETIRING-SCALE');
+        expect(
+          (await connectionManager.connectScale(
+            duplicateAuxiliary,
+            role: ScaleConnectionRole.auxiliary,
+          )).outcome,
+          ConnectionOutcome.conflict,
+        );
+        expect(duplicateAuxiliary.connectCallCount, 0);
+
+        final peerAuxiliary = _CountingScale(deviceId: 'healthy-peer');
+        expect(
+          (await connectionManager.connectScale(
+            peerAuxiliary,
+            role: ScaleConnectionRole.auxiliary,
+          )).outcome,
+          ConnectionOutcome.connected,
+        );
+        expect(peerAuxiliary.connectCallCount, 1);
         expect(
           (await connectionManager.connectScale(
             TestScale(deviceId: 'RETIRING-SCALE'),
@@ -2451,6 +2470,11 @@ void main() {
           ConnectionOutcome.connected,
         );
         replacement.dispose();
+        await connectionManager.auxiliaryScaleRegistry.disconnect(
+          'healthy-peer',
+        );
+        duplicateAuxiliary.dispose();
+        peerAuxiliary.dispose();
         scale.dispose();
       });
 
@@ -4517,6 +4541,17 @@ class _BlockingTestScale extends TestScale {
   Future<void> disconnect() async {
     if (!disconnectStarted.isCompleted) disconnectStarted.complete();
     await disconnectCompleter.future;
+  }
+}
+
+class _CountingScale extends TestScale {
+  int connectCallCount = 0;
+
+  _CountingScale({required super.deviceId});
+
+  @override
+  Future<void> onConnect() async {
+    connectCallCount++;
   }
 }
 

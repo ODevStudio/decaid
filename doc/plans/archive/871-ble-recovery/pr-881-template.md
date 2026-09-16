@@ -15,11 +15,11 @@ acceptance.
 
 ## Verification
 
-- `dart format` completed for the changed Dart files.
+- CI-matched `dart_style 3.1.13` formatting completed for the changed Dart
+  files.
 - `flutter analyze --no-pub`: no issues.
-- Post-merge focused connection ownership, auxiliary-scale, USB attach,
-  discovery, and controller suites: 325 passed.
-- Post-merge full `flutter test --no-pub`: 4,772 passed, one existing skip.
+- Post-fix connection manager and attempt-owner suites: 173 passed.
+- Post-fix full `flutter test --no-pub`: 4,314 passed, one existing skip.
 - `universal_ble` PR #28 run `35108117215`: all jobs passed on merge
   `e3ddd73beab1bfb1447abb65fad44438239936e6`, including
   `gradle :universal_ble:testDebugUnitTest` for exact head
@@ -32,8 +32,8 @@ acceptance.
 
 ## Impact
 
-- Timed-out or cancelled connects cannot adopt later, and same-device
-  replacements wait for retirement cleanup.
+- Timed-out or cancelled connects cannot adopt later, and same-device primary
+  or auxiliary replacements wait for retirement cleanup.
 - No API, schema, storage, migration, plugin-session, or scale-power behavior
   changes.
 - `universal_ble` is reproducibly pinned in both dependency files to reviewed,

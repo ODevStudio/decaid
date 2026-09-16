@@ -7,6 +7,58 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <title>Decaid</title>
         <item>
             <title>0.8.6</title>
+            <pubDate>Wed, 16 Sep 2026 06:44:32 +0000</pubDate>
+            <sparkle:version>2801</sparkle:version>
+            <sparkle:shortVersionString>0.8.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[## What's Changed
+* fix(ble): harden background scale-watch ownership by @tadelv in https://github.com/decentespresso/decaid/pull/773
+* chore(deps): pin flutter_js 0.8.6 by @ODevStudio in https://github.com/decentespresso/decaid/pull/776
+* feat(workflow): add water-volume stop override by @ODevStudio in https://github.com/decentespresso/decaid/pull/774
+* docs(skill): add application log inspection recipe by @tadelv in https://github.com/decentespresso/decaid/pull/779
+* fix(serial): deduplicate Android devices by ID by @ODevStudio in https://github.com/decentespresso/decaid/pull/782
+* fix: suppress Bengle internal scale disconnect error by @ODevStudio in https://github.com/decentespresso/decaid/pull/783
+* feat(plugins): register sensor-backed devices by @tadelv in https://github.com/decentespresso/decaid/pull/775
+* feat(plugins): expose workflow updates by @ODevStudio in https://github.com/decentespresso/decaid/pull/787
+* docs: refresh Decent app agent skill by @ODevStudio in https://github.com/decentespresso/decaid/pull/789
+* fix(scan): escape connect-error dead end and remove legacy discovery UI by @tadelv in https://github.com/decentespresso/decaid/pull/807
+* fix(ble): retry a write rejected for its write property by @allofmeng in https://github.com/decentespresso/decaid/pull/781
+* fix(updates): respect externally managed app builds by @tadelv in https://github.com/decentespresso/decaid/pull/815
+* WIP: host-owned BLE drivers and plugin Scale support (#809) by @ODevStudio in https://github.com/decentespresso/decaid/pull/813
+* fix(ble): prevent stale discovery cache from disconnecting active links by @tadelv in https://github.com/decentespresso/decaid/pull/812
+* fix(storage): resume partial v5 migrations and fail startup safely by @tadelv in https://github.com/decentespresso/decaid/pull/824
+* Plugin BLE binding and Sensor discovery checkpoint by @ODevStudio in https://github.com/decentespresso/decaid/pull/820
+* Plugin Scale API and sleep-policy checkpoint by @ODevStudio in https://github.com/decentespresso/decaid/pull/821
+* Plugin Scale measurement-timing checkpoint by @ODevStudio in https://github.com/decentespresso/decaid/pull/822
+* fix(webui): give each skin a stable origin, so its browser storage survives by @ChampionDesigns in https://github.com/decentespresso/decaid/pull/790
+* fix(api): refuse an explicit null targetYield on PUT /api/v1/workflow by @ChampionDesigns in https://github.com/decentespresso/decaid/pull/791
+* fix(api): PUT /machine/ledStrip echoes the palette the machine stored by @ChampionDesigns in https://github.com/decentespresso/decaid/pull/794
+* report pausedSteam and puffing as themselves, not as idle by @ChampionDesigns in https://github.com/decentespresso/decaid/pull/800
+* docs(plugins): the http endpoint contract, and the query pass-through pinned by @ChampionDesigns in https://github.com/decentespresso/decaid/pull/796
+* fix(shots): read back shots imported from de1app by @allofmeng in https://github.com/decentespresso/decaid/pull/786
+* fix(webserver): refuse to boot when a fixed port is already bound by @ChampionDesigns in https://github.com/decentespresso/decaid/pull/799
+* Bookoo reference BLE Scale checkpoint by @ODevStudio in https://github.com/decentespresso/decaid/pull/823
+* fix(update): a failed update check must say so, not look like "up to date" by @ChampionDesigns in https://github.com/decentespresso/decaid/pull/792
+* fix(firmware): poll for verify completion when the notification never arrives by @ChampionDesigns in https://github.com/decentespresso/decaid/pull/806
+* feat(scale): show connected Skale firmware revision by @MaxRink in https://github.com/decentespresso/decaid/pull/742
+* fix(scale): make Skale battery reporting nullable and refresh it by @MaxRink in https://github.com/decentespresso/decaid/pull/743
+* fix(steam): select the declared milk-temperature sensor by @MaxRink in https://github.com/decentespresso/decaid/pull/847
+* fix(serial): resolve one desktop serial identity per port by @tadelv in https://github.com/decentespresso/decaid/pull/863
+* fix(ios): lower deployment target to iOS 16.7 by @tadelv in https://github.com/decentespresso/decaid/pull/872
+* ci(android): skip obsolete SDK tools package by @tadelv in https://github.com/decentespresso/decaid/pull/873
+* fix(scale): separate original Decent Scale and HDS behavior by @tadelv in https://github.com/decentespresso/decaid/pull/867
+* fix(scale): harden HDS sleeping reconnect follow-up by @ODevStudio in https://github.com/decentespresso/decaid/pull/882
+
+## New Contributors
+* @MaxRink made their first contribution in https://github.com/decentespresso/decaid/pull/742
+
+**Full Changelog**: https://github.com/decentespresso/decaid/compare/v0.8.5...v0.8.6
+
+]]></description>
+            <enclosure url="https://github.com/decentespresso/decaid/releases/download/v0.8.6/decaid-macos-0.8.6.zip" length="64706115" type="application/octet-stream" sparkle:edSignature="/DiFOw4J8zJ/Mnney4NETu1EK4/KH6wb4EaeiJpoAkMUQGh6+0AelIBTY2OGDgoT1jGn6NkO7z0cg2IC3yUyBw=="/>
+        </item>
+        <item>
+            <title>0.8.6</title>
             <pubDate>Mon, 14 Sep 2026 11:49:34 +0000</pubDate>
             <sparkle:channel>beta</sparkle:channel>
             <sparkle:version>2766</sparkle:version>
@@ -398,6 +450,6 @@ See `doc/RELEASE.md` for install and verification instructions.
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: rYyrclCYIZ6av6eUC4du2dtQmDbhqjbngjLmWlgl2eJPMsOHzt1SXKshaeseAntkqS3zX6WETTeFr5UVgykICQ==
-length: 34270
+edSignature: qlgW8v6RWlDJzV5tbDdUskmoPHoG7DrC+PUr8monbEf4zrYXzB7vEore4wQiC5Bo9RDNSZ713s0bkB1vPZhHDw==
+length: 39699
 -->

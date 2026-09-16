@@ -10,36 +10,32 @@ native admission/lifecycle solution. It is intentionally narrower than a new
 BLE scheduler: Decaid keeps policy, retry and scan ownership; the Android
 plugin owns native direct-connect admission and exact GATT lifecycle state.
 
-## Current draft status
+## Final integration status
 
-The branch is stacked on the current #867 head so the accepted scale-power
-baseline remains in force while this work is developed:
+The branch preserves the accepted #867 scale-power baseline:
 
 - `displayOff` keeps a healthy original / unknown / pre-modern-HDS scale link;
 - explicit disconnect remains a real disconnect;
 - this issue must not re-introduce reconnect churn to implement recovery.
 
-The first safe Decaid slice is in place: exact attempt ownership is modeled by
-`ConnectionAttemptOwner`, and `De1Controller` / `ScaleController` fence late
-connect completions with their existing connection generations. A first
-`ConnectionManager` retirement prototype was deliberately removed from the
-draft after the existing shutdown regression exposed a sequencing bug: it
-started cleanup while the source connect was still pending. The required
-manager ordering is therefore explicit: invalidate immediately, then await the
-exact source, then perform owned cleanup, and release the lease last.
+The Decaid integration is complete. `ConnectionAttemptOwner` retains exact
+machine and scale leases through source completion and owned cleanup;
+`De1Controller` and `ScaleController` generation fences prevent stale
+adoption. Timeout, scan cancellation, adapter loss, explicit disconnect and
+shutdown invalidate only matching attempts. Cleanup waits for the exact source
+future and releases the lease last, including the adapter-reset escape for a
+failed native cleanup.
 
-The `universal_ble` dependency is **not repinned yet**. The current reviewed
-`#28` head is `84c5406872d6fbef5ddae57dea0c7dfdfe12d759`, but its Android unit-test
-job currently fails three regressions:
+Quick connect no longer abandons a source future behind a shorter outer
+timeout. Direct controller connects disarm the existing scale watch before
+native connection work, preserving one scan/watch owner instead of adding a
+second scheduler.
 
-1. `NotificationLifecycleTest.staleDisconnectCannotRemoveCurrentGatt`
-2. `UniversalBlePluginTest.mixedCaseDisconnectKeepsConnectDisconnectDelay`
-3. `UniversalBlePluginTest.connectedCallbackCancelsPendingReconnect`
-
-Pinning a known-red head would turn an upstream recovery regression into the
-Decaid baseline. The final part-4 commit must instead pin the exact reviewed,
-green `#28` head in both `pubspec.yaml` and `pubspec.lock` and preserve all
-unrelated pins, especially `flutter_js`.
+The dependency is pinned to reviewed `universal_ble#28` head
+`895aa687a25c99b17c81e8672cac7de051551ded`. Pull-request run `35108117215`
+passed the Android helper/plugin tests and all other jobs on merge commit
+`e3ddd73beab1bfb1447abb65fad44438239936e6`, whose parents are the exact
+admission base `a5cc8dd727a2f7da6822eccdc968038839fe0bb9` and lifecycle head.
 
 ## Entry-point inventory
 
@@ -65,11 +61,10 @@ the source connect has actually settled.
 
 ### Quick connect
 
-`UniversalBleDiscoveryService._connectWithRetry` currently wraps
-`device.onConnect()` in a 10 s `Future.timeout` on non-Linux platforms. The
-Android transport below it calls `UniversalBle.connect(... timeout: 20 s)`.
-That means the outer quick-connect timeout can return first while the source
-future and native attempt are still alive.
+`UniversalBleDiscoveryService._connectWithRetry` now awaits
+`device.onConnect()` directly. The transport owns its native timeout, so the
+host no longer returns while that source future and native attempt remain
+alive.
 
 The quick-connect retry is host policy. It must remain a single retry owner:
 waiting for native admission is not a connect failure and must not consume a
@@ -83,11 +78,10 @@ does not cancel the source future. A source that finishes later can therefore
 still reach controller adoption unless adoption is fenced by the exact
 attempt that timed out.
 
-`De1Controller` and `ScaleController` now have a connection-generation fence
-around their awaited connect/readiness boundary. Invalidating that generation
-prevents a late completion from adopting the candidate or clearing a newer
-controller generation. The manager still needs to bind that invalidation to
-the exact host attempt lease.
+`De1Controller` and `ScaleController` have a connection-generation fence around
+their awaited connect/readiness boundary. `ConnectionManager` binds that fence
+to the exact host lease, retains ownership after a caller-visible timeout, and
+settles only after source completion and owned cleanup.
 
 ### Background ScaleWatch
 
@@ -98,18 +92,11 @@ background scheduler.
 
 ### Scan ownership
 
-Burst/watch ownership is tracked in `UniversalBleDiscoveryService`, including
-pause/resume around burst scans. One hazardous edge remains:
-`_stopScanForConnect()` directly calls `UniversalBle.stopScan()` when the
-owner is not `burst`. If the owner is `watch`, the native scan can stop while
-Decaid still records the watch as active. The integration must transition the
-watch owner/phase through the existing deactivation path and must not leave a
-dead watch marked active or restart an overlapping scan.
-
-This must be coordinated with upper `ScaleWatch` state: deactivating only the
-lower watch would leave the upper watcher armed with no native scan. The fix
-therefore needs an explicit pause/resume or ownership hand-off, not a bare
-`stopScan()` replacement.
+Burst/watch ownership remains in `UniversalBleDiscoveryService`. Before a
+direct machine or scale controller connect, `ConnectionManager` disarms the
+upper `ScaleWatch`; the existing deactivation path clears the lower watch
+owner before native connect work stops scanning. Reconnects started by the
+watch itself skip the redundant disarm.
 
 ### Plugin-owned BLE sessions
 
@@ -135,15 +122,15 @@ Consequences:
 - repeated cancellation is idempotent and preserves the first owner/reason;
 - no process-wide GATT mutex is introduced.
 
-`ConnectionAttemptOwner` is the small primitive for this rule. The controller
-local generation fences are in place. The remaining manager wiring must bind a
-lease to each machine/scale source future, invalidate its controller generation
-when cancellation wins, retain the lease after caller-visible timeout, await
-that exact source, run owned cleanup only afterwards, and settle/release last.
+`ConnectionAttemptOwner` is the small primitive for this rule. The manager
+binds a lease to each machine/scale source future, invalidates its controller
+generation when cancellation wins, retains the lease after caller-visible
+timeout, awaits that exact source, runs owned cleanup afterwards, and releases
+last.
 
 ## Timeout / cancellation chain
 
-The final wiring should make each boundary explicit:
+The final wiring makes each boundary explicit:
 
 | Boundary | Owner | Required behavior |
 | --- | --- | --- |
@@ -197,30 +184,33 @@ Decaid remains the retry-policy owner:
 | background watch stop for connect | transition both lower scan owner and upper watch state before native stop |
 | shutdown | invalidate attempts first, await exact source + owned cleanup, then finish teardown |
 
-## Implementation slices for this draft
+## Implemented slices
 
 - [x] Add exact-attempt ownership primitive and deterministic unit tests.
 - [x] Fence `De1Controller` and `ScaleController` adoption with connection
   generations so stale completions cannot adopt or clear a newer generation.
-- [ ] Bind `ConnectionManager` machine/scale attempts to exact leases and keep
+- [x] Bind `ConnectionManager` machine/scale attempts to exact leases and keep
   a timed-out lease owned until source -> cleanup -> release completes.
-- [ ] Preserve the existing shutdown contract: no candidate cleanup while its
+- [x] Preserve the existing shutdown contract: no candidate cleanup while its
   source connect is still pending, and shutdown waits for retirement.
-- [ ] Make user scan cancellation invalidate only scan-owned early attempts.
-- [ ] Remove/replace the orphan-producing quick-connect outer timeout while
+- [x] Make user scan cancellation invalidate only scan-owned early attempts.
+- [x] Remove the orphan-producing quick-connect outer timeout while
   retaining one host retry owner.
-- [ ] Route watch-owned stop-for-connect through an explicit lower/upper watch
-  ownership hand-off so the watch is not left falsely armed.
-- [ ] Expose active/cancelled/retiring attempt diagnostics from the manager.
-- [ ] Add regressions for cancel-while-queued, timeout-before-start,
+- [x] Disarm the upper scale watch before direct controller connects so lower
+  scan ownership is not left falsely active.
+- [x] Add regressions for cancel-while-queued, timeout-before-start,
   timeout-after-native-start, late success, replacement blocking, retry
   fairness, shutdown ordering, and scan/watch ownership.
-- [ ] Once `universal_ble#28` is green, pin its exact immutable SHA in
+- [x] Pin the exact green `universal_ble#28` SHA in
   `pubspec.yaml` + `pubspec.lock` and run the focused Flutter/Android matrix.
+
+No new public attempt-diagnostics surface is added here; the neutral diagnostic
+endpoint and evidence collection remain owned by #875.
 
 ## Merge gates
 
-This draft is not mergeable until all of the following are true:
+The software gates below are complete; affected-device acceptance remains in
+part 5/5:
 
 1. #875 has enough evidence to keep the native solution selected.
 2. `tadelv/universal_ble#28` has a reviewed green head and the required Android

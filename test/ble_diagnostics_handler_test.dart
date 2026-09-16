@@ -66,6 +66,14 @@ void main() {
     expect(body['diagnosticsVersion'], 2);
     expect(body['timestamp'], isA<String>());
     expect(body['monotonicMs'], isA<int>());
+    expect(body['sampling']['startedAt'], isA<String>());
+    expect(body['sampling']['completedAt'], body['timestamp']);
+    expect(
+      body['sampling']['completedMonotonicMs'],
+      greaterThanOrEqualTo(body['sampling']['startedMonotonicMs']),
+    );
+    expect(body['ble']['servicesDiagnostics']['complete'], isTrue);
+    expect(body['ble']['servicesDiagnostics']['sampledAt'], isA<String>());
     expect(
       body['ble']['services'][0]['details']['scan']['nativeIsScanning'],
       false,
@@ -114,6 +122,7 @@ void main() {
       deviceController: devices,
       connectionManager: manager,
       settingsController: settings,
+      deviceStateProbeTimeout: const Duration(milliseconds: 10),
     ).addRoutes(router);
 
     final response = await router.call(
@@ -132,6 +141,64 @@ void main() {
     devices.dispose();
     ble.dispose();
     scale.dispose();
+  });
+
+  test('BLE diagnostics bounds and coalesces slow service diagnostics', () async {
+    final ble = _BlockingBleDiscoveryService();
+    final devices = DeviceController([ble]);
+    await devices.initialize();
+    final settings = SettingsController(MockSettingsService());
+    await settings.loadSettings();
+    final manager = ConnectionManager(
+      deviceScanner: devices,
+      de1Controller: De1Controller(controller: devices),
+      scaleController: ScaleController(),
+      settingsController: settings,
+    );
+    final router = Router().plus;
+    BleDiagnosticsHandler(
+      deviceController: devices,
+      connectionManager: manager,
+      settingsController: settings,
+      serviceDiagnosticsWaitTimeout: const Duration(milliseconds: 10),
+    ).addRoutes(router);
+
+    Request request() =>
+        Request('GET', Uri.parse('http://localhost/api/v1/diagnostics/ble'));
+
+    final responses = await Future.wait([
+      router.call(request()),
+      router.call(request()),
+    ]);
+    expect(ble.diagnosticsCallCount, 1);
+
+    for (final response in responses) {
+      final body = jsonDecode(await response.readAsString());
+      expect(response.statusCode, 200);
+      expect(body['ble']['services'], isEmpty);
+      expect(body['ble']['servicesDiagnostics']['complete'], isFalse);
+      expect(body['ble']['servicesDiagnostics']['sampledAt'], isNull);
+    }
+
+    ble.completeDiagnostics({
+      'scan': {'nativeIsScanning': false},
+    });
+    await Future<void>.delayed(Duration.zero);
+
+    final response = await router.call(request());
+    final body = jsonDecode(await response.readAsString());
+    expect(response.statusCode, 200);
+    expect(ble.diagnosticsCallCount, 2);
+    expect(body['ble']['servicesDiagnostics']['complete'], isTrue);
+    expect(body['ble']['servicesDiagnostics']['sampledAt'], isA<String>());
+    expect(
+      body['ble']['services'].single['details']['scan']['nativeIsScanning'],
+      false,
+    );
+
+    manager.dispose();
+    devices.dispose();
+    ble.dispose();
   });
 }
 
@@ -170,5 +237,20 @@ class _SilentScale extends TestScale {
   void dispose() {
     _silentState.close();
     super.dispose();
+  }
+}
+
+class _BlockingBleDiscoveryService extends MockBleDiscoveryService {
+  final Completer<Map<String, Object?>> _diagnostics = Completer();
+  int diagnosticsCallCount = 0;
+
+  @override
+  Future<Map<String, Object?>> diagnostics() {
+    diagnosticsCallCount++;
+    return _diagnostics.future;
+  }
+
+  void completeDiagnostics(Map<String, Object?> value) {
+    if (!_diagnostics.isCompleted) _diagnostics.complete(value);
   }
 }

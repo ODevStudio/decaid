@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:reaprime/src/controllers/connection_manager.dart';
 import 'package:reaprime/src/controllers/device_controller.dart';
 import 'package:reaprime/src/models/device/device.dart';
@@ -7,17 +9,35 @@ import 'package:shelf_plus/shelf_plus.dart';
 
 final Stopwatch _bleDiagnosticsClock = Stopwatch()..start();
 
-class BleDiagnosticsHandler {
-  static const Duration _deviceStateProbeTimeout = Duration(milliseconds: 250);
+class _ServiceDiagnosticsSnapshot {
+  final List<Map<String, Object?>> services;
+  final bool complete;
+  final DateTime? sampledAt;
 
+  const _ServiceDiagnosticsSnapshot({
+    required this.services,
+    required this.complete,
+    required this.sampledAt,
+  });
+}
+
+class BleDiagnosticsHandler {
   final DeviceController deviceController;
   final ConnectionManager connectionManager;
   final SettingsController settingsController;
+  final Duration deviceStateProbeTimeout;
+  final Duration serviceDiagnosticsWaitTimeout;
 
-  const BleDiagnosticsHandler({
+  Future<List<Map<String, Object?>>>? _servicesDiagnosticsInFlight;
+  List<Map<String, Object?>> _lastServicesDiagnostics = const [];
+  DateTime? _lastServicesDiagnosticsAt;
+
+  BleDiagnosticsHandler({
     required this.deviceController,
     required this.connectionManager,
     required this.settingsController,
+    this.deviceStateProbeTimeout = const Duration(milliseconds: 250),
+    this.serviceDiagnosticsWaitTimeout = const Duration(milliseconds: 500),
   });
 
   void addRoutes(RouterPlus app) {
@@ -25,18 +45,35 @@ class BleDiagnosticsHandler {
   }
 
   Future<Response> _handleGet(Request request) async {
+    final sampleStartedAt = DateTime.now().toUtc();
+    final sampleStartedMonotonicMs =
+        _bleDiagnosticsClock.elapsedMicroseconds ~/ 1000;
+    final servicesFuture = _serviceDiagnosticsSnapshot();
+    final peersFuture = _deviceSnapshots();
+
+    final services = await servicesFuture;
+    final peers = await peersFuture;
     final status = connectionManager.currentStatus;
-    final services = await deviceController.bleDiagnostics();
-    final peers = await _deviceSnapshots();
     final sampledAt = DateTime.now().toUtc();
+    final monotonicMs = _bleDiagnosticsClock.elapsedMicroseconds ~/ 1000;
 
     return jsonOk({
       'diagnosticsVersion': 2,
       'timestamp': sampledAt.toIso8601String(),
-      'monotonicMs': _bleDiagnosticsClock.elapsedMicroseconds ~/ 1000,
+      'monotonicMs': monotonicMs,
+      'sampling': {
+        'startedAt': sampleStartedAt.toIso8601String(),
+        'startedMonotonicMs': sampleStartedMonotonicMs,
+        'completedAt': sampledAt.toIso8601String(),
+        'completedMonotonicMs': monotonicMs,
+      },
       'ble': {
         'adapterState': deviceController.currentAdapterState.name,
-        'services': services,
+        'services': services.services,
+        'servicesDiagnostics': {
+          'complete': services.complete,
+          'sampledAt': services.sampledAt?.toIso8601String(),
+        },
       },
       'connection': {
         'phase': status.phase.name,
@@ -72,6 +109,41 @@ class BleDiagnosticsHandler {
     });
   }
 
+  Future<_ServiceDiagnosticsSnapshot> _serviceDiagnosticsSnapshot() async {
+    final future =
+        _servicesDiagnosticsInFlight ?? _startServiceDiagnosticsCollection();
+    try {
+      final services = await future.timeout(serviceDiagnosticsWaitTimeout);
+      return _ServiceDiagnosticsSnapshot(
+        services: services,
+        complete: true,
+        sampledAt: _lastServicesDiagnosticsAt,
+      );
+    } on TimeoutException {
+      return _ServiceDiagnosticsSnapshot(
+        services: _lastServicesDiagnostics,
+        complete: false,
+        sampledAt: _lastServicesDiagnosticsAt,
+      );
+    }
+  }
+
+  Future<List<Map<String, Object?>>> _startServiceDiagnosticsCollection() {
+    late final Future<List<Map<String, Object?>>> future;
+    future = deviceController.bleDiagnostics().then((services) {
+      final snapshot = List<Map<String, Object?>>.unmodifiable(services);
+      _lastServicesDiagnostics = snapshot;
+      _lastServicesDiagnosticsAt = DateTime.now().toUtc();
+      return snapshot;
+    }).whenComplete(() {
+      if (identical(_servicesDiagnosticsInFlight, future)) {
+        _servicesDiagnosticsInFlight = null;
+      }
+    });
+    _servicesDiagnosticsInFlight = future;
+    return future;
+  }
+
   Future<List<Map<String, Object?>>> _deviceSnapshots() async {
     final devices = deviceController.devices.toList(growable: false);
     return Future.wait(
@@ -79,7 +151,7 @@ class BleDiagnosticsHandler {
         ConnectionState? state;
         try {
           state = await device.connectionState
-              .timeout(_deviceStateProbeTimeout)
+              .timeout(deviceStateProbeTimeout)
               .first;
         } catch (_) {
           // Diagnostics must stay read-only and bounded even if a device's

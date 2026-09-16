@@ -19,8 +19,9 @@ The candidate is reproducibly pinned to published `universal_ble` PR #28 head
 Native Android unit tests passed in CI. A side-by-side Android APK was built
 from the combined source plus a temporary simulation-isolation overlay and was
 run on a supplemental Samsung tablet. That modified overlay is not the
-published production-source candidate. The production-source Android build and
-the physical acceptance matrix remain unrun.
+published production-source candidate. A subsequent direct verification built
+the unmodified published #881 application source as a release APK. Physical
+BLE acceptance remains unrun; supplemental HDS USB results are recorded below.
 
 ## Review result
 
@@ -32,9 +33,9 @@ watch pause layer, app-global scheduler, global GATT command queue, or new
 dependency was retained.
 
 This result is limited to review, deterministic host tests, native Android CI
-tests, and the explicitly supplemental simulation-overlay run below. A
-production-source candidate Android build and physical acceptance remain open
-gates. The Linux app compile, package, and launch smoke passed.
+tests, and the explicitly supplemental runtime checks below. Published-source
+Android compilation now passes, but physical acceptance
+remains an open gate. The Linux app compile, package, and launch smoke passed.
 
 ## Immutable revisions
 
@@ -63,7 +64,7 @@ not substituted for CI or Android hardware results.
 | A: Decaid baseline/diagnostics | Docs-only final-head CI run `35115385053` passed format, analysis, the Linux build smoke, and the full Flutter suite with 4,298 visible passes and one skip; runtime code is unchanged from tested parent `2484d04aefdfa6134344571eb7aeb3f71535d73c` | No affected hardware |
 | B: native admission | Implemented and host-verified: analyze clean; host Flutter suite 136 passed with 13 platform skips | Inspected-head CI is green; affected hardware is unverified |
 | C: native lifecycle | Final head passed analysis and 136 host Flutter tests with 13 platform skips; CI run `35108117215` passed the native Android helper/plugin tests | Host Flutter tests do not validate Kotlin; affected hardware is unverified |
-| D: Decaid integration | Final-head CI run `35112700192` passed format, analysis, the Linux app compile/package/launch smoke, and 4,315 visible Flutter tests with one skip; the local Windows run passed 4,314 with one skip | The production-source candidate Android build and affected hardware are unverified; CMake 3.28 and private Microsoft-signed NuGet 7.9 compiled an earlier pre-final Windows candidate revision until `universal_ble_plugin.dll` failed to link with unresolved MSVC `std::bad_cast` symbols, so the desktop simulated REST smoke did not run |
+| D: Decaid integration | Final-head CI run `35112700192` passed format, analysis, the Linux app compile/package/launch smoke, and 4,315 visible Flutter tests with one skip; the local Windows run passed 4,314 with one skip. Direct published-source Android release compilation also passed as recorded below. | Affected hardware remains unverified; CMake 3.28 and private Microsoft-signed NuGet 7.9 compiled an earlier pre-final Windows candidate revision until `universal_ble_plugin.dll` failed to link with unresolved MSVC `std::bad_cast` symbols, so the desktop simulated REST smoke did not run |
 | Final A+D combination | Isolated merge passed analysis, 4 focused diagnostic tests, 252 focused connection tests, and the full Windows suite with 4,317 visible passes and one skip | No integration code changes; affected hardware remains unverified |
 | Supplemental Android simulation overlay R2 | APK build, signing, manifest inspection, analysis, the foreground-service test, and the targeted initialization test passed. The targeted TLS plugin tests passed when native QuickJS and Git OpenSSL were on process-local `PATH`. On Samsung `SM-X210` / Android 16, the native launcher and candidate API exposed `MockDe1` and `Mock Scale`; the first connection cycle produced usable machine and scale snapshots. | The overlay changes startup, ports, application ID, and hardware-service isolation and will not be published. Its full suite was not green: 4,306 passed, one skipped, and four failed. One TLS setup failure was environmental and passed in the targeted rerun; three assertions retain production ports `4001`/`8080` while the overlay uses `14001`/`18080`. A second same-process mock reconnect restored connected state and machine snapshots but not scale weight frames. |
 | Supplemental Android simulation overlay R3 | The focused MockScale regression passed 7 tests, analysis was clean, and the rebuilt APK passed signing and package-identity inspection. On the same Samsung tablet, two same-process MockDe1 and MockScale connect/readiness cycles each produced connected inventory, an idle machine snapshot, connected scale status, and a newly received weight frame. | The R3 overlay adds the local unpublished mock-only reconnect fix to R2, pending separate publication permission. It changes startup isolation and provides no physical BLE, DE1, original-scale, HDS, or affected-device evidence. |
@@ -187,6 +188,67 @@ artifacts use production application ID `net.tadel.reaprime`, do not contain
 the final issue #871 candidate, and were not installed. Comparison details
 are retained in `android-prior-workflow-comparison.txt`.
 
+## Direct verification follow-up, 2026-09-16
+
+These checks extend the earlier compilation and USB evidence without changing
+the fixed BLE acceptance criteria.
+
+### Published-source Android compilation
+
+Unmodified tracked application source at #881 head
+`88e5d9b492f837eab4471f8451f917123737068e` compiled successfully using
+`flutter build apk --release --no-pub`, without a `simulate` define or startup,
+foreground-service, permission, package-ID, or transport changes. The final
+native dependency resolved to the clean cached checkout
+`895aa687a25c99b17c81e8672cac7de051551ded`. Gradle completed in 321.6 seconds.
+APK SHA-256:
+`868E9FED89DA884226719231FAEBB294C446985675C4C8C21E9994FF37944153`.
+APK signature verification passed; package inspection confirmed
+`net.tadel.reaprime`, minimum SDK 28, target SDK 35, and BLE permissions.
+This APK was not installed, protecting the existing application.
+
+This is compilation evidence, not a distributable release or runtime test.
+It uses local debug signing and the existing CI-style bundled-skin stub;
+no skin was exercised. Flutter 3.44.8/Dart 3.12.2 used SDK-compatible resolved
+versions intl 0.20.2, matcher 0.12.19, meta 1.18.0, test_api 0.7.11, and
+vector_math 2.2.0, rather than the five versions in the committed lockfile.
+The actual package configuration and dependency graph were retained. Flutter
+selected Android Studio JBR 21 for Gradle, despite the command environment's
+JDK 17 `JAVA_HOME`. The process-local selector fallback was
+`-Djdk.net.unixdomain.tmpdir=Z:\issue871-nonexistent`.
+
+Raw evidence: `production-d-android-build.txt` (SHA-256
+`6922C8D19C599FAA5DE971F4FAAF512C698955A584C9DBAF75014542956D6E6F`),
+`production-d-package-config.json`, `production-d-deps.json`,
+`production-d-badging.txt`, and `production-d-88e5d9b.apk` in the evidence
+directory. Earlier Android environment failures are historical observations,
+not the status of the final candidate compilation.
+
+### Powered HDS USB connection cycles
+
+After the user confirmed HDS power, the existing hash-verified native Windows
+harness ran against the same COM5 PnP identity. It calls the candidate
+`HDSSerial.onConnect`, not a simulated scale. Two connect/read/disconnect cycles
+passed, each writing only the documented `03 20 01 01` readiness request.
+The production parser reported 32 and 38 valid weight frames respectively,
+zero invalid frames, and zero checksum failures. Both cycles reached connected
+state, received weights, then disconnected; the harness exited successfully
+and released the port. All observed weights were 0.0, so changing-load response
+and measurement accuracy were not tested. Frames arrived in batches; 20
+callback samples are not 20 independently timed USB arrivals.
+
+Raw evidence: `hds-direct-confirmed-power.txt`, SHA-256
+`AB6BD76A706AD67E88EA683A8CAB3BD6FCB64B59F558771785C6432A2F0438DD`.
+The executable hash matched the previously retained harness provenance.
+This supersedes the previous power-confirmation gate, not the earlier timeout
+observations. It is a real USB/protocol smoke test, not Android BLE recovery,
+an app-owned desktop discovery test, or a completed physical matrix row.
+
+The user also made the Samsung tablet and Bengle available. Bengle normal
+application connection applies defaults and uploads the selected workflow
+profile. That connection remains pending explicit approval of these effects;
+the protected Decaid installation has not been changed.
+
 ## Fixed comparison contract
 
 Baseline and candidate must use identical current scale behavior:
@@ -243,8 +305,8 @@ reported separately from a real controller/radio failure.
 | COM5 HDS USB | `USB-SERIAL CH340K`, WCH, VID/PID `1A86:7522`, revision `0264`; passive 115200 8N1 capture received ASCII `Weight:` and `[health]` output. Two later bounded readiness attempts wrote complete `03 20 01 01` requests after subscribing, drained synchronously, received zero bytes, timed out after two seconds, and released the port. | Harness and desktop transport match on endpoint, 115200 8N1, flow control off, DTR/RTS off, subscription-before-write, and raw-byte routing. The passive stream contained no framed `03 CE` HDS packets. Local scale power/responding state was not independently confirmed during the active attempts, so this is not a hardware-silence conclusion and no further serial retry is authorized without that confirmation. Harness SHA-256: `18414C5E7CDBA809C0231E6F6D82F9948966893196302D82A77919459CDA385C`; provenance SHA-256: `CB3971D116D5F500F504C183A1460E223E24AAEE3A019AFEC4CB4056D7D2A7D6`. |
 
 The tablet is not the affected Android 10/Teclast target and provides no BLE,
-DE1, original-scale, or candidate-build acceptance evidence. COM5 proves only
-that the host can open the HDS USB transport and receive passive scale output.
+DE1, or original-scale acceptance evidence. The later direct COM5 run above
+adds two powered HDSSerial connection cycles to the passive observations.
 No existing Windows runner could exercise `SerialServiceDesktop` without a
 working build of the earlier Windows candidate revision, so app-owned HDS
 reconnect remains unverified. Raw serial evidence includes
@@ -318,11 +380,11 @@ GATT clients remain outside the direct-admission guarantee.
   connection suites, analysis, and the full Flutter suite without code changes.
 - Native Android helper/plugin tests: passed in CI run `35108117215`; host
   Flutter tests do not validate Kotlin.
-- Candidate Decaid Android app compilation: the isolated R2 and R3 simulation
-  overlays compiled, installed, and launched. The production-source candidate
-  build remains unverified; bounded JDK 17 and JBR 21 invocations against earlier
-  candidate revisions failed at `Selector.open()` before Gradle project
-  configuration.
+- Candidate Decaid Android app compilation: direct release compilation of
+  unmodified #881 application source passed, with the toolchain, resolved
+  dependencies, signing, and bundled-skin qualifications recorded above.
+  The production-ID APK was not installed. R2/R3 remain separate simulation
+  overlay results, not production-source runtime evidence.
 - Supplemental runtime: R2 exposed missing mock-scale emission after reconnect.
   R3 passed the requested two same-process mock machine/scale readiness cycles
   after the focused fix. This does not close a physical acceptance row.

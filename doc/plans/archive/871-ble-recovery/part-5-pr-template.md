@@ -12,6 +12,20 @@ has not run.
 
 ## Verification
 
+- Direct follow-up: unmodified published #881 application source compiled as
+  an Android release APK without simulation or startup-isolation changes.
+  Native pin `895aa687a25c99b17c81e8672cac7de051551ded` was verified clean.
+  APK SHA-256 `868E9FED89DA884226719231FAEBB294C446985675C4C8C21E9994FF37944153`;
+  signature and package inspection passed. The APK was not installed.
+  This build uses Flutter 3.44.8 SDK-resolved dependencies, local debug signing,
+  and the CI-style skin stub, not release-distribution or runtime acceptance.
+- Direct HDS follow-up after user power confirmation: two real COM5
+  connect/read/disconnect cycles passed through candidate HDSSerial, with 32
+  and 38 valid frames, zero invalid/checksum frames, and successful port release.
+  All weights were zero; changing-load accuracy was not tested. This is USB
+  protocol evidence, not affected-device BLE acceptance. Raw transcript hash:
+  `AB6BD76A706AD67E88EA683A8CAB3BD6FCB64B59F558771785C6432A2F0438DD`.
+
 - Block A docs-only final head `b53d4ba650f1dc15d073b7d728f679ae3db3d142`:
   CI run `35115385053` passed format, analysis, the Linux build smoke, and the
   full Flutter suite with 4,298 visible passes and one skip. Runtime code is
@@ -97,7 +111,8 @@ has not run.
   settings, completed and drained the four-byte `03 20 01 01` write, received
   zero bytes, timed out after two seconds, and released the port. Local scale
   power/responding state was not independently confirmed, so hardware silence
-  is not established and no further retry is authorized without confirmation.
+  was not established. The later powered direct test above supersedes that
+  confirmation gate, while retaining these unsuccessful observations.
 - Android 10/Teclast, DE1, and original full-height scale: `NOT RUN` because the
   required hardware is unavailable.
 
@@ -105,9 +120,10 @@ has not run.
 
 - Documentation and acceptance evidence only; no additional runtime, API,
   schema, storage, migration, plugin, or scale-protocol change.
-- The production-source candidate Android build and hardware acceptance remain
-  release gates. The isolated R2/R3 simulation overlays do not close either
-  gate. The Linux app compile/package/launch smoke passed.
+- Published-source Android compilation now passes under the recorded local
+  toolchain. Physical BLE acceptance remains a release gate; neither USB smoke
+  tests nor the R2/R3 simulation overlays close it. The Linux app
+  compile/package/launch smoke passed.
 
 ## Contributor Responsibility
 

@@ -1255,18 +1255,15 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
   }
 
   Future<void> _connectWithRetry(Device device) async {
-    final timeout = Platform.isLinux
-        ? const Duration(seconds: 60)
-        : const Duration(seconds: 10);
     try {
-      await device.onConnect().timeout(timeout);
+      await device.onConnect();
     } on BleConnectException catch (e) {
       log.info('Quick-connect GATT error ($e), retrying once after 1s');
       await Future.delayed(const Duration(seconds: 1));
       try {
         await device.disconnect();
       } catch (_) {}
-      await device.onConnect().timeout(timeout);
+      await device.onConnect();
     }
   }
 

@@ -1,8 +1,14 @@
 class ConnectionAttemptOwner {
   final Map<String, ConnectionAttemptLease> _active = {};
-  int _nextGeneration = 0;
 
-  ConnectionAttemptLease? acquire(String deviceId, {bool automatic = false}) {
+  ConnectionAttemptLease? acquire(
+    String deviceId, {
+    ConnectionAttemptRole role = ConnectionAttemptRole.machine,
+    bool automatic = false,
+    bool scanOwned = false,
+    bool controllerOwned = true,
+    bool ble = false,
+  }) {
     final key = _normalize(deviceId);
     if (_active.containsKey(key)) return null;
 
@@ -10,46 +16,30 @@ class ConnectionAttemptOwner {
       owner: this,
       deviceId: deviceId,
       key: key,
-      generation: ++_nextGeneration,
+      role: role,
       automatic: automatic,
+      scanOwned: scanOwned,
+      controllerOwned: controllerOwned,
+      ble: ble,
     );
     _active[key] = lease;
     return lease;
   }
 
-  bool isCurrent(ConnectionAttemptLease lease) =>
+  bool _isCurrent(ConnectionAttemptLease lease) =>
       identical(_active[lease._key], lease) && !lease._settled;
 
-  bool isBlocked(String deviceId) => _active.containsKey(_normalize(deviceId));
+  Iterable<ConnectionAttemptLease> get active =>
+      List.unmodifiable(_active.values);
 
-  ConnectionAttemptLease? activeFor(String deviceId) =>
-      _active[_normalize(deviceId)];
-
-  Map<String, Object?> diagnosticsFor(String deviceId) {
-    final active = activeFor(deviceId);
-    if (active == null) {
-      return const {'active': false};
-    }
-    return {
-      'active': true,
-      'deviceId': active.deviceId,
-      'generation': active.generation,
-      'automatic': active.automatic,
-      'cancelled': active.cancelled,
-      'cancelReason': active.cancelReason,
-      'settled': active.settled,
-    };
-  }
-
-  bool _cancel(ConnectionAttemptLease lease, String? reason) {
-    if (!isCurrent(lease) || lease._cancelled) return false;
+  bool _cancel(ConnectionAttemptLease lease) {
+    if (!_isCurrent(lease) || lease._cancelled) return false;
     lease._cancelled = true;
-    lease._cancelReason = reason;
     return true;
   }
 
   bool _settle(ConnectionAttemptLease lease) {
-    if (!isCurrent(lease)) {
+    if (!_isCurrent(lease)) {
       lease._settled = true;
       return false;
     }
@@ -61,33 +51,43 @@ class ConnectionAttemptOwner {
   static String _normalize(String deviceId) => deviceId.toLowerCase();
 }
 
+enum ConnectionAttemptRole { machine, scale }
+
 class ConnectionAttemptLease {
   final ConnectionAttemptOwner _owner;
   final String deviceId;
   final String _key;
-  final int generation;
+  final ConnectionAttemptRole role;
   final bool automatic;
+  final bool scanOwned;
+  final bool controllerOwned;
+  final bool ble;
 
   bool _cancelled = false;
   bool _settled = false;
-  String? _cancelReason;
+  bool _cleanupFailed = false;
 
   ConnectionAttemptLease._({
     required ConnectionAttemptOwner owner,
     required this.deviceId,
     required String key,
-    required this.generation,
+    required this.role,
     required this.automatic,
+    required this.scanOwned,
+    required this.controllerOwned,
+    required this.ble,
   }) : _owner = owner,
        _key = key;
 
   bool get cancelled => _cancelled;
-  bool get settled => _settled;
-  String? get cancelReason => _cancelReason;
 
-  bool get mayAdopt => !_cancelled && !_settled && _owner.isCurrent(this);
+  bool get cleanupFailed => _cleanupFailed;
 
-  bool cancel({String? reason}) => _owner._cancel(this, reason);
+  bool get mayAdopt => !_cancelled && !_settled && _owner._isCurrent(this);
+
+  bool cancel() => _owner._cancel(this);
+
+  void markCleanupFailed() => _cleanupFailed = true;
 
   bool settle() => _owner._settle(this);
 }

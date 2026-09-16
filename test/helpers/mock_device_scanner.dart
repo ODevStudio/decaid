@@ -45,6 +45,7 @@ class MockDeviceScanner implements DeviceScanner {
   );
 
   Completer<void>? holdNextWatchStart;
+  Completer<void>? holdNextWatchStop;
   Object? failNextWatchStopWith;
   int _watchGeneration = 0;
 
@@ -187,6 +188,9 @@ class MockDeviceScanner implements DeviceScanner {
   Future<void> stopScaleWatch() async {
     stopWatchCallCount++;
     _watchGeneration++;
+    final hold = holdNextWatchStop;
+    holdNextWatchStop = null;
+    if (hold != null) await hold.future;
     final error = failNextWatchStopWith;
     failNextWatchStopWith = null;
     if (error != null) {

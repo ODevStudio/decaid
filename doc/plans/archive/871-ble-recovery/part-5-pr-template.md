@@ -19,9 +19,14 @@ is unpublished and affected-device acceptance has not run.
   platform skips.
 - Block D against local corrected C: analyze clean; focused suites 215 and 59
   passed; final integrated suite passed 4,274 tests with one skip.
-- Corrected-fork and candidate-app Android compilation: `NOT RUN`; Temurin JDK
-  17 and Android Studio's bundled JetBrains JBR 21 both fail at
-  `Selector.open()` before Gradle project evaluation.
+- Corrected-fork and candidate-app Android compilation: `NOT RUN`; one bounded
+  corrected-fork native-test command used cached Gradle 8.14.3, Android
+  Studio's JBR 21, the normal persistent-daemon path, and the prior Kotlin
+  settings as invocation properties. The daemon started and accepted the
+  client socket, but the connection stream failed at `Selector.open()` before
+  project configuration, so the task did not execute and the gated integrated
+  build was not attempted. This is limited to the tested current environment;
+  prior same-JBR local builds and ADB tablet runs succeeded.
 - Simulated REST smoke: `NOT RUN`; CMake 3.28 and private Microsoft-signed
   NuGet 7.9 configured and compiled the Windows candidate until
   `universal_ble_plugin.dll` failed to link with unresolved MSVC

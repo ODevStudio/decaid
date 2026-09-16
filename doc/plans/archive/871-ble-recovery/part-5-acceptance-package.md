@@ -59,16 +59,47 @@ for CI or Android hardware results.
 | C: native lifecycle | Implemented and host-verified at local correction `546d55bbaef7f750c570b88d8c797299fc01335a`: analyze clean; 136 host tests passed with 13 platform skips | Android-unverified; CI covers the uncorrected PR head, not the local correction |
 | D: Decaid integration | Implemented and candidate-verified against local C: analyze clean; focused suites 215 and 59 passed; final integrated suite passed 4,274 tests with one skip | Android-unverified; CMake 3.28 and private Microsoft-signed NuGet 7.9 configured and compiled the Windows candidate until `universal_ble_plugin.dll` failed to link with unresolved MSVC `std::bad_cast` symbols; the simulated REST smoke did not run |
 
-The JDK 17 selector probe still failed after setting a short process-scoped
+The bounded JDK 17 selector probe failed after setting a short process-scoped
 `jdk.net.unixdomain.tmpdir`, reaching `UnixDomainSockets.connect0` with
 `Invalid argument: connect`. Android Studio's materially different JetBrains
-JBR 21.0.8 launched Gradle 8.14.3, but both `gradle help --no-daemon` and an
-independent `Selector.open()` probe failed at the same loopback path before
-project evaluation. Corrected-fork and candidate-app Android builds were
-therefore `NOT RUN`; these startup attempts are not Android compilation
-evidence. Raw JBR output is retained in
-`android-studio-jbr-gradle-startup.txt` and
-`android-studio-jbr-selector-probe.txt` in the evidence directory.
+JBR 21.0.8 also failed in the current environment during both the initial
+`gradle help --no-daemon` invocation and an independent `Selector.open()`
+probe.
+
+One follow-up comparison used the corrected fork C worktree at
+`546d55bbaef7f750c570b88d8c797299fc01335a`, cached Gradle 8.14.3, Studio JBR
+21, the normal persistent-daemon path, and only the prior Kotlin settings as
+per-invocation properties:
+
+```powershell
+$env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
+$env:ANDROID_HOME='C:\AndroidSDK'
+$env:ANDROID_SDK_ROOT='C:\AndroidSDK'
+& 'C:\Users\El Fuzzi\.gradle\wrapper\dists\gradle-8.14.3-bin\cv11ve7ro1n3o1j4so8xd9n66\gradle-8.14.3\bin\gradle.bat' `
+  :universal_ble:testDebugUnitTest `
+  -Pkotlin.incremental=false `
+  -Pkotlin.compiler.execution.strategy=in-process `
+  --stacktrace --info
+```
+
+No Java process was active before the command. Gradle started daemon PID 22264
+with a three-hour idle timeout, advertised `localhost/127.0.0.1:55320`, and
+accepted the client connection. The client and daemon then failed while
+constructing the connection stream because `Selector.open()` could not
+establish its internal loopback pipe. The daemon exited, project configuration
+was not reached, and the native test task did not execute. Per the bounded stop
+condition, the integrated candidate build was not attempted. Raw client and
+daemon output is retained in `android-normal-daemon-c-native-tests.txt` and
+`android-normal-daemon-22264.log`.
+
+These failures describe only the tested invocations in the current process
+environment. They do not show that this host or tablet cannot build or test
+Android. Local Decaid builds and ADB tablet runs succeeded in August 2026 with
+the same Android Studio JBR 21 and a persistent Gradle daemon, including
+`flutter run --profile -d R9TX60JBR5T --dart-define=simulate=replay`. The prior
+artifacts use production application ID `net.tadel.reaprime`, do not contain
+the corrected issue #871 candidate, and were not installed. Comparison details
+are retained in `android-prior-workflow-comparison.txt`.
 
 ## Fixed comparison contract
 
@@ -122,7 +153,7 @@ reported separately from a real controller/radio failure.
 | Target | Observation | Coverage |
 | --- | --- | --- |
 | Samsung `SM-X210` tablet | Read-only ADB inventory: Android 16 / SDK 36, build `BP2A.250605.031.A3`, existing `net.tadel.reaprime` version `1.0.0` build 2735 | Inventory only; the running Decaid app was not stopped, launched, changed, or replaced, and no candidate APK was installed |
-| Windows Android toolchain | Android Studio `AI-252.27397.103.2522.14514259`, bundled JetBrains JBR 21.0.8, SDK 36.1.0 at `C:/AndroidSDK` | Toolchain inventory and startup failure only; Gradle project evaluation and Android compilation did not run |
+| Windows Android toolchain | Android Studio `AI-252.27397.103.2522.14514259`, bundled JetBrains JBR 21.0.8, SDK 36.1.0 at `C:/AndroidSDK` | Toolchain inventory and bounded current-invocation failures only; the normal-daemon comparison did not reach Gradle project configuration, while prior same-JBR local builds and ADB runs succeeded |
 | COM5 HDS USB | `USB-SERIAL CH340K`, WCH, VID/PID `1A86:7522`, revision `0264`; one 12-second passive 115200 8N1 capture received 424 bytes, including 12 ASCII `Weight: 0.00` samples and two health lines | `HARDWARE/TRANSPORT BASELINE`, not candidate app or Android BLE acceptance; no bytes were written, firmware was not reported, reconnect was not exercised, and the port was closed and disposed |
 
 The tablet is not the affected Android 10/Teclast target and provides no BLE,
@@ -192,9 +223,10 @@ GATT clients remain outside the direct-admission guarantee.
 
 - Prerequisite software reviews: implemented locally and host-verified; the
   integrated Decaid tree is candidate-verified against local corrected fork C.
-- Corrected-fork and candidate-app Android compilation: unverified because
-  both Temurin JDK 17 and Android Studio JBR 21 fail to open the selector used
-  by Gradle before project evaluation.
+- Corrected-fork and candidate-app Android compilation: unverified; the
+  bounded current JDK 17 and JBR 21 invocations failed at `Selector.open()`
+  before Gradle project configuration, while prior same-JBR local builds and
+  ADB tablet runs succeeded.
 - Exact candidate dependency pin: blocked by unpublished corrected fork commit.
 - Affected-device matrix: `NOT RUN`.
 - Maintainer hardware sign-off: pending.

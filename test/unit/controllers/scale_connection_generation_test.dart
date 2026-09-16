@@ -18,6 +18,7 @@ class _BlockingScale implements Scale {
   final BehaviorSubject<ConnectionState> _connectionState =
       BehaviorSubject.seeded(ConnectionState.discovered);
   final BehaviorSubject<ScaleSnapshot> _snapshots = BehaviorSubject();
+  int connectCalls = 0;
 
   void completeConnect() {
     if (!connectCompleter.isCompleted) connectCompleter.complete();
@@ -58,6 +59,7 @@ class _BlockingScale implements Scale {
 
   @override
   Future<void> onConnect() async {
+    connectCalls++;
     await connectCompleter.future;
     _connectionState.add(ConnectionState.connected);
   }
@@ -84,6 +86,20 @@ class _BlockingScale implements Scale {
 
   @override
   Future<void> resetTimer() async {}
+}
+
+class _BlockingHandoffScale extends _BlockingScale
+    implements TransportHandoffScale {
+  _BlockingHandoffScale(super.deviceId);
+
+  final Completer<void> handoffCompleter = Completer<void>();
+
+  void completeHandoff() {
+    if (!handoffCompleter.isCompleted) handoffCompleter.complete();
+  }
+
+  @override
+  Future<void> disconnectForHandoff() => handoffCompleter.future;
 }
 
 void main() {
@@ -143,6 +159,33 @@ void main() {
 
       controller.dispose();
       await pending.close();
+      await replacement.close();
+    },
+  );
+
+  test(
+    'invalidation during handoff prevents replacement connect from starting',
+    () async {
+      final controller = ScaleController();
+      final previous = _BlockingHandoffScale('scale-old');
+      final replacement = _BlockingScale('scale-new');
+
+      previous.completeConnect();
+      await previous.onConnect();
+      await controller.adoptScale(previous);
+
+      final connect = controller.connectToScale(replacement);
+      await Future<void>.delayed(Duration.zero);
+
+      controller.invalidatePendingConnectionAttempt();
+      previous.completeHandoff();
+      await connect;
+
+      expect(replacement.connectCalls, 0);
+      expect(controller.connectedScaleOrNull, isNull);
+
+      controller.dispose();
+      await previous.close();
       await replacement.close();
     },
   );

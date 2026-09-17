@@ -11,8 +11,9 @@ The narrow Android direct-connect admission and exact-GATT lifecycle design is
 the retained candidate. Host and deterministic software evidence supports its
 ownership invariants, but does not establish the field root cause or prove
 affected-device recovery. The required Android 10/Teclast tablet, DE1, and
-original full-height Decent Scale are unavailable. Every physical result below
-is `NOT RUN`; #871, #875, and #877 remain open.
+original full-height Decent Scale are unavailable. Every affected-device matrix
+row remains `NOT RUN`; #871, #875, and #877 remain open. The supplemental
+Samsung/Bengle BLE run below includes passes and a direct-connect failure.
 
 The candidate is reproducibly pinned to published `universal_ble` PR #28 head
 `895aa687a25c99b17c81e8672cac7de051551ded` in both Decaid dependency files.
@@ -20,14 +21,17 @@ Native Android unit tests passed in CI. A side-by-side Android APK was built
 from the combined source plus a temporary simulation-isolation overlay and was
 run on a supplemental Samsung tablet. That modified overlay is not the
 published production-source candidate. A subsequent direct verification built
-the unmodified published #881 application source as a release APK. Physical
-BLE acceptance remains unrun; supplemental HDS USB results are recorded below.
+the unmodified published #881 application source as a release APK.
+Affected-device BLE acceptance remains unrun; supplemental HDS USB and
+Samsung/Bengle BLE results are recorded below.
 
 ## Review result
 
-No known deterministic-test correctness defect remains in the reviewed A
-through D software diffs. The Decaid correction reuses controller and `ScaleWatch`
-generation fences and adds only one device-id lease owner. Unused diagnostic,
+The reviewed A through D software diffs passed their recorded deterministic
+tests. The later hardware run found a pre-existing direct-connect path that
+omits Bengle's virtual scale; it remains unresolved. The Decaid correction
+reuses controller and `ScaleWatch` generation fences and adds only one
+device-id lease owner. Unused diagnostic,
 cancellation-reason, and monotonic-generation state was removed. No second
 watch pause layer, app-global scheduler, global GATT command queue, or new
 dependency was retained.
@@ -246,7 +250,7 @@ an app-owned desktop discovery test, or a completed physical matrix row.
 
 The user also made the Samsung tablet and Bengle available. Bengle normal
 application connection applies defaults and uploads the selected workflow
-profile. That connection remains pending explicit approval of these effects;
+profile. The user approved those effects for the 2026-09-17 run below;
 the protected Decaid installation has not been changed.
 
 ### Separate hardware candidate startup
@@ -277,7 +281,75 @@ Package: `net.tadel.reaprime.issue871hardware`. APK SHA-256:
 Unpublished isolation patch including resolved-lock changes SHA-256:
 `4053A064EDB7A5BD23FAB9660D73E8FF2CCE4C6857C58A87AD562CAB8F2625CA`.
 Raw evidence uses the `hardware-direct-*` prefix in the same evidence
-directory. The app remains installed separately for the approved hardware run.
+directory. The app remains installed separately for hardware testing.
+
+### Samsung/Bengle BLE run, 2026-09-17
+
+The orchestrator performed this run directly, without a worker. It used the
+same hardware APK and native pin recorded above, Samsung SM-X210 / Android 16,
+and a BLE Bengle reporting firmware 428. The user approved normal startup
+settings/profile writes. The test sent no brew, heat, firmware, calibration,
+tare, bond-removal, or Bluetooth-reset command. It skipped account login and
+data import. Initialization used the real discovery and foreground-service
+code. Android reported `isForeground=true` during the screen-off check.
+
+| Check | Observed result |
+| --- | --- |
+| Discovery-only scan | Found Bengle over BLE; no other supported device appeared. |
+| Direct REST connect outside a selection session | HTTP 200 `connected` in 5,666 ms and diagnostic phase `ready`. Received 1,847 fresh machine snapshots, but zero scale snapshots and only scale `disconnected` status. The scale remained absent beyond the 120-second readiness bound. **FAIL for machine-plus-integrated-scale readiness.** |
+| First reconnect through normal onboarding | After explicit disconnect and about 26 seconds without late adoption, preferred-device quick-connect restored machine and scale snapshots in about six seconds. The continuously open sockets received 2,298 machine and 2,297 scale snapshots during this capture. |
+| Screen off/wake | Screen sleep at host UTC 06:13:55.191, wake at 06:15:12.787 (77.6 seconds). Android reported Dozing, then Awake. Each stream delivered 1,164 snapshots during the screen-off interval, with no additional native connect attempt. This USB-attached, short screen-off check is not deep-idle or overnight acceptance. |
+| Second reconnect through dashboard Scan for devices | Explicit disconnect returned in 1,168 ms. Both streams stopped; inventory stayed disconnected during the following 22-second observation. After the dashboard action at 06:15:59.820, machine snapshots resumed at 06:16:19.297 and scale snapshots at 06:16:19.391, on the same open sockets. This includes the normal scan time and stays within 120 seconds. |
+| Native attempts and ownership | One native `BluetoothGatt.connect(auto=false)` per connection, three total. Client IDs 47 and 48 each disconnected and unregistered before the next owner connected. No new connected event appeared during either observed explicit-disconnect gap. No native failure/throw or unavailable-peer case was injected. |
+
+The direct-connect failure is source-traced to
+`ConnectionManager._connectMachine`: it runs `_runScalePhase` only for an
+active selection session; the direct REST branch can publish `ready` without
+calling `_attachBengleVirtualScale`. Baseline `f181612d` contains the same
+branch, so this is not evidence of a regression introduced by #881 or the
+native fork. The normal onboarding and scan paths attach the virtual scale.
+Do not count their later success as a pass for the failed direct REST path.
+
+The scale values were negative and drifted during the run; no tare or
+calibration was attempted. Fresh frames establish stream liveness, not weight
+accuracy. Bengle's scale shares its machine transport and is not a second BLE
+peer. No independent scale loss, dual-link loss, unavailable-peer fairness,
+adapter transition, or close-throw recovery was exercised.
+
+The app logged a two-second PresenceController firmware-state timeout on the
+first normal reconnect. The CI-style skin stub returned HTTP 404 when normal
+onboarding opened it; the test then used the native dashboard. These remain
+recorded limitations, not a clean skin or presence-feature acceptance result.
+Two debug-process memory snapshots showed PSS 705,284 and 738,848 KiB and RSS
+817,776 and 766,000 KiB. This short, changing-UI run does not establish absence
+of progressive resource growth.
+
+Host receive timestamps and tablet payload timestamps are separate clocks;
+the tablet clock was about 8.8 seconds behind. Readiness durations above use
+host time. Raw local evidence uses `bengle-*.ndjson`, `bengle-direct-logcat.txt`,
+`bengle-app-*-log.txt`, and `bengle-memory-connected*.txt` in the existing
+evidence directory. Raw discovery diagnostics include unrelated nearby device
+identifiers and must be redacted before external sharing.
+
+The optional cup placement/removal was not confirmed. A separate 90-second
+capture received 1,361 scale frames ranging from -369.0625 to -367.375 g;
+it does not establish a controlled load response. Final disconnect returned
+HTTP 200 in 1,135 ms, and client ID 49 unregistered. A subsequent 20-second
+capture received zero machine/scale snapshots and scale `disconnected` status.
+Only the hardware-test app was force-stopped, its port 18081 forward removed,
+and its owned host logcat process stopped. No candidate PID or ADB forward
+remained. Protected-app package code path, version and update time matched the
+preflight record; the test did not start, stop, replace, clear, or import its
+data.
+
+| Raw evidence | SHA-256 |
+| --- | --- |
+| `bengle-initial.ndjson` | `0FC74A02BDA88AAAE58562C7B6E333470A1F25FA8A2179D0F69A87592709BC95` |
+| `bengle-reconnect-onboarding.ndjson` | `3927750E2A08DBE308D45A3FD423BCEBE04C44EE218BA845314F5D5045CE94E1` |
+| `bengle-screen-and-cycle2.ndjson` | `45D07983194C8352938D891D59E01E5471E6A301AE51673057107E57C75A5BE8` |
+| `bengle-load-response.ndjson` | `D5E239B0B14A6646189B56350395DF7415C4D95C0FECF3C36B3F3CD08ED65931` |
+| `bengle-final-disconnected.ndjson` | `A7A57F6F20F3FFB155771D97D9E4F903EC9DF89990CCF3C3029716705B4DC1AD` |
+| `bengle-direct-logcat.txt` | `4953BF9BBF3AEDA0317DC6D7A5EDF5A5CC77A43E39B3003B56D8EE6CD11F358A` |
 
 ## Fixed comparison contract
 
@@ -330,12 +402,13 @@ reported separately from a real controller/radio failure.
 
 | Target | Observation | Coverage |
 | --- | --- | --- |
-| Samsung `SM-X210` tablet | Android 16 / SDK 36, build `BP2A.250605.031.A3`; isolated R2 and R3 packages installed and run beside existing `net.tadel.reaprime` version `1.0.0` build 2735 | Supplemental simulation only. R2 exposed the mock-scale reconnect defect; R3 passed two same-process mock machine/scale readiness cycles after the reviewed fix. Production remained PID `10742` and was not stopped, launched, changed, or replaced. No physical BLE was started. |
+| Samsung `SM-X210` tablet | Android 16 / SDK 36, build `BP2A.250605.031.A3`; isolated R2/R3 simulation and later `issue871hardware` packages beside existing `net.tadel.reaprime` version `1.0.0` build 2735 | R2/R3 results remain simulation-only. The 2026-09-17 real BLE run above adds Bengle reconnect/screen-off evidence and a failed direct-connect scale result. It does not replace the affected-device matrix. |
 | Windows Android toolchain | Android Studio `AI-252.27397.103.2522.14514259`, bundled JetBrains JBR 21.0.8, Temurin JDK 17.0.17, SDK 36.1.0 at `C:/AndroidSDK` | R2 and R3 isolation-overlay APK builds succeeded with Flutter 3.44.8, JDK 17, Gradle 8.14.3, and the recorded process-local selector fallback. Earlier bounded JDK 17 and JBR 21 startup failures at `Selector.open()` remain retained as historical environment provenance. |
 | COM5 HDS USB | `USB-SERIAL CH340K`, WCH, VID/PID `1A86:7522`, revision `0264`; passive 115200 8N1 capture received ASCII `Weight:` and `[health]` output. Two later bounded readiness attempts wrote complete `03 20 01 01` requests after subscribing, drained synchronously, received zero bytes, timed out after two seconds, and released the port. | Harness and desktop transport match on endpoint, 115200 8N1, flow control off, DTR/RTS off, subscription-before-write, and raw-byte routing. The passive stream contained no framed `03 CE` HDS packets. Local scale power/responding state was not independently confirmed during the active attempts, so this is not a hardware-silence conclusion and no further serial retry is authorized without that confirmation. Harness SHA-256: `18414C5E7CDBA809C0231E6F6D82F9948966893196302D82A77919459CDA385C`; provenance SHA-256: `CB3971D116D5F500F504C183A1460E223E24AAEE3A019AFEC4CB4056D7D2A7D6`. |
 
-The tablet is not the affected Android 10/Teclast target and provides no BLE,
-DE1, or original-scale acceptance evidence. The later direct COM5 run above
+The tablet is not the affected Android 10/Teclast target. Its supplemental
+Bengle BLE results provide no DE1 or original-scale acceptance evidence.
+The later direct COM5 run above
 adds two powered HDSSerial connection cycles to the passive observations.
 No existing Windows runner could exercise `SerialServiceDesktop` without a
 working build of the earlier Windows candidate revision, so app-owned HDS
@@ -418,6 +491,10 @@ GATT clients remain outside the direct-admission guarantee.
 - Supplemental runtime: R2 exposed missing mock-scale emission after reconnect.
   R3 passed the requested two same-process mock machine/scale readiness cycles
   after the focused fix. This does not close a physical acceptance row.
+- Supplemental physical BLE: Samsung/Bengle normal reconnects and the short
+  screen-off check passed. Direct REST connection omitted the integrated scale;
+  that pre-existing application-path defect remains unresolved. No affected
+  matrix row or long-term resource criterion is satisfied by this run.
 - Exact candidate dependency pin: satisfied at published PR #28 head
   `895aa687a25c99b17c81e8672cac7de051551ded`.
 - Affected-device matrix: `NOT RUN`.

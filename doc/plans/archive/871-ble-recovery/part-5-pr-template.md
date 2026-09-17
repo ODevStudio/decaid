@@ -29,9 +29,24 @@ has not run.
   analyzed cleanly, installed, cold-launched, and answered device/diagnostic
   API reads on Samsung. It retains the real startup/BLE/foreground-service
   code, with package/port isolation and existing `simulate=0` mode. It includes
-  no MockScale fix. No scan or connection was started; Bengle's normal
-  settings/profile application awaits approval. The candidate was stopped
-  and its forward removed; the production installation was unchanged.
+  no MockScale fix. After user approval, the 2026-09-17 Samsung/Bengle BLE run
+  completed two normal reconnects with fresh machine and integrated-scale
+  frames in about six and twenty seconds, one native attempt each. Both
+  streams continued through 77.6 seconds of screen off; Android confirmed an
+  active foreground service. Explicit-disconnect gaps showed no late adoption.
+  This is supplemental single-BLE-peer evidence, not the affected matrix.
+  Final disconnect and 20-second observation showed no telemetry or late
+  adoption. The test app and owned logcat capture were stopped and its ADB
+  forward removed. The protected installation was unchanged.
+- The same hardware run found an unresolved direct-connect defect: outside a
+  scan-selection session, REST connect returned HTTP 200 and `ready`, with
+  1,847 machine snapshots but zero scale snapshots beyond 120 seconds.
+  `_connectMachine` skips Bengle virtual-scale attachment on that path.
+  Baseline `f181612d` has the same branch; the finding is not evidence of a
+  native-fork or #881 regression. The subsequent normal-path passes do not
+  erase this failure. A PresenceController timeout, skin-stub 404, negative
+  drifting weight values, and the inconclusive short memory sample are
+  retained in the acceptance package.
 
 - Block A docs-only final head `b53d4ba650f1dc15d073b7d728f679ae3db3d142`:
   CI run `35115385053` passed format, analysis, the Linux build smoke, and the
@@ -128,9 +143,9 @@ has not run.
 - Documentation and acceptance evidence only; no additional runtime, API,
   schema, storage, migration, plugin, or scale-protocol change.
 - Published-source Android compilation now passes under the recorded local
-  toolchain. Physical BLE acceptance remains a release gate; neither USB smoke
-  tests nor the R2/R3 simulation overlays close it. The Linux app
-  compile/package/launch smoke passed.
+  toolchain. Affected-device BLE acceptance remains a release gate; neither USB
+  smoke, Samsung/Bengle supplemental tests, nor R2/R3 simulation close it.
+  The Linux app compile/package/launch smoke passed.
 
 ## Contributor Responsibility
 

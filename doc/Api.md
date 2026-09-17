@@ -159,6 +159,10 @@ behavior. `quick=true` returns immediately but does not change that policy.
 and connection timeouts return 504. The devices WebSocket returns the same result
 after each connect command.
 
+Disconnect failures return 500. A selected grinder clears local controller
+state before its failure is reported. The devices WebSocket reports the same
+failure in an `error` frame.
+
 Each device entry carries an **`available`** boolean. `true` = currently present
 in discovery or actively connected; `false` = a **remembered** device that isn't
 present (reported with `state: "disconnected"`). Devices the user connects to are

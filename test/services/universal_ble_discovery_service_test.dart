@@ -15,6 +15,7 @@ import 'package:reaprime/src/models/device/device_implementation.dart';
 import 'package:reaprime/src/models/device/impl/de1/de1.models.dart';
 import 'package:reaprime/src/models/device/machine.dart';
 import 'package:reaprime/src/models/device/remembered_device.dart';
+import 'package:reaprime/src/models/device/transport/ble_connect_exception.dart';
 import 'package:reaprime/src/models/device/transport/data_transport.dart';
 import 'package:reaprime/src/settings/feature_flags.dart';
 import 'package:reaprime/src/settings/settings_controller.dart';
@@ -919,6 +920,56 @@ void main() {
   });
 
   group('quick-connect identity policy', () {
+    test('quick-connect does not retry recovery-blocked admission', () async {
+      const deviceId = 'AA:BB:CC:DD:EE:21';
+      var connectCalls = 0;
+      final transport = _TrackingFakeBleTransport(
+        deviceId: deviceId,
+        onConnect: () async {
+          connectCalls++;
+          throw BleConnectException(
+            code: 'connectionFailed',
+            description: 'RECOVERY_BLOCKED: unresolved native GATT teardown',
+            function: 'connect',
+          );
+        },
+      );
+      final sut = UniversalBleDiscoveryService(
+        requiresSystemDevice: () => false,
+        transportFactory:
+            ({
+              required device,
+              required stopScan,
+              required requestLargeMtuNonAndroid,
+              required lifecycleGate,
+            }) => transport,
+      );
+      addTearDown(sut.dispose);
+      await sut.initialize();
+
+      await expectLater(
+        sut.tryQuickConnect(
+          const RememberedDevice(
+            id: deviceId,
+            name: 'DE1',
+            type: domain.DeviceType.machine,
+            implementation: DeviceImplementation.unifiedDe1,
+            transportType: TransportType.ble,
+          ),
+        ),
+        throwsA(
+          isA<BleConnectException>().having(
+            (error) => error.recoveryBlocked,
+            'recoveryBlocked',
+            isTrue,
+          ),
+        ),
+      );
+
+      expect(connectCalls, 1);
+      expect(transport.disconnectCalls, 0);
+      expect(transport.disposeCalls, 1);
+    });
     test(
       'quick-connect keeps ownership past the former host timeout',
       () async {

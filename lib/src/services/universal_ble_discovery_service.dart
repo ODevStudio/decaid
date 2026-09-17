@@ -1225,6 +1225,22 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
       await _adoptCachedDevice(key, device);
       log.info('Quick-connect succeeded for $deviceId');
       return device;
+    } on BleConnectException catch (e, st) {
+      if (e.recoveryBlocked) {
+        log.warning('Quick-connect recovery blocked for $deviceId', e, st);
+        try {
+          await transport.dispose();
+        } catch (_) {}
+        rethrow;
+      }
+      log.warning('Quick-connect failed for $deviceId', e, st);
+      try {
+        await device.disconnect();
+      } catch (_) {}
+      try {
+        await transport.dispose();
+      } catch (_) {}
+      return null;
     } catch (e, st) {
       log.warning('Quick-connect failed for $deviceId', e, st);
       try {
@@ -1258,6 +1274,7 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
     try {
       await device.onConnect();
     } on BleConnectException catch (e) {
+      if (e.recoveryBlocked) rethrow;
       log.info('Quick-connect GATT error ($e), retrying once after 1s');
       await Future.delayed(const Duration(seconds: 1));
       try {

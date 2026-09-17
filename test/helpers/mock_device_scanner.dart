@@ -97,6 +97,7 @@ class MockDeviceScanner implements DeviceScanner {
     queuedScanResults.clear();
     failNextScanWith = null;
     quickConnectResult = null;
+    quickConnectError = null;
     quickConnectCallCount = 0;
   }
 
@@ -143,12 +144,16 @@ class MockDeviceScanner implements DeviceScanner {
   }
 
   Device? quickConnectResult;
+  Object? quickConnectError;
 
   int quickConnectCallCount = 0;
 
   @override
   Future<Device?> tryQuickConnect(RememberedDevice remembered) async {
     quickConnectCallCount++;
+    final error = quickConnectError;
+    quickConnectError = null;
+    if (error != null) throw error;
     return quickConnectResult;
   }
 

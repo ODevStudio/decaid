@@ -32,6 +32,9 @@ class ConnectionAttemptOwner {
   Iterable<ConnectionAttemptLease> get active =>
       List.unmodifiable(_active.values);
 
+  ConnectionAttemptLease? activeFor(String deviceId) =>
+      _active[_normalize(deviceId)];
+
   bool owns(String deviceId, {ConnectionAttemptRole? role}) {
     final attempt = _active[_normalize(deviceId)];
     return attempt != null && (role == null || attempt.role == role);

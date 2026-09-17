@@ -20,6 +20,13 @@ void main() {
       },
     );
 
+    test('activeFor normalizes device ids', () {
+      final owner = ConnectionAttemptOwner();
+      final attempt = owner.acquire('AA:BB')!;
+
+      expect(owner.activeFor('aa:bb'), same(attempt));
+    });
+
     test('repeated cancel is idempotent', () {
       final owner = ConnectionAttemptOwner();
       final attempt = owner.acquire('AA:BB')!;

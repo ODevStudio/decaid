@@ -119,7 +119,7 @@ Consequences:
 - duplicate requests for the same device coalesce/conflict while the retiring
   attempt still owns the slot;
 - different device ids remain independent at the Decaid layer;
-- repeated cancellation is idempotent and preserves the first owner/reason;
+- repeated cancellation is idempotent;
 - no process-wide GATT mutex is introduced.
 
 `ConnectionAttemptOwner` is the small primitive for this rule. The manager

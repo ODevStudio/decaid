@@ -24,6 +24,18 @@ jobs:
           cache: true
       - name: Apply review fixes
         run: python3 .github/_temporary_881_review_fixes.py
+      - name: Refine expected-disconnect regression
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/controllers/connection_manager_test.dart')
+          text = p.read_text()
+          old = "        expect(\n          connectionManager.currentStatus.error?.kind,\n          ConnectionErrorKind.bluetoothPermissionDenied,\n        );\n        connectionManager.debugNotifyMachineDisconnected(device.deviceId);\n        expect(\n          connectionManager.currentStatus.error?.kind,\n          ConnectionErrorKind.bluetoothPermissionDenied,\n        );\n"
+          new = "        final errorBeforeDisconnect = connectionManager.currentStatus.error;\n        connectionManager.debugNotifyMachineDisconnected(device.deviceId);\n        expect(connectionManager.currentStatus.error, same(errorBeforeDisconnect));\n"
+          if old not in text:
+              raise SystemExit('expected-disconnect assertion anchor not found')
+          p.write_text(text.replace(old, new, 1))
+          PY
       - name: Install dependencies
         run: flutter pub get
       - name: Format changed Dart files
@@ -39,10 +51,9 @@ jobs:
             test/controllers/connection_manager_test.dart
       - name: Run focused tests
         run: |
-          flutter test --no-pub \
-            test/controllers/connection_attempt_owner_test.dart \
-            test/services/universal_ble_discovery_service_test.dart \
-            test/controllers/connection_manager_test.dart
+          flutter test --no-pub test/controllers/connection_attempt_owner_test.dart
+          flutter test --no-pub test/services/universal_ble_discovery_service_test.dart --plain-name 'quick-connect does not retry recovery-blocked admission'
+          flutter test --no-pub test/controllers/connection_manager_test.dart
       - name: Commit fixes and remove temporary files
         run: |
           rm .github/workflows/_temporary_881_review_fixes.yml

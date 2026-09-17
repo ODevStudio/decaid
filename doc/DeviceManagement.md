@@ -537,8 +537,9 @@ source completion and stale-candidate cleanup. A caller-visible timeout fences
 controller adoption immediately but does not abandon the source Future or
 release the id for a replacement. If the source later succeeds, its candidate
 is disconnected before the lease is released. Failed sources are also cleaned
-up, and cleanup failure keeps the same-device lease reserved so an unresolved
-transport cannot overlap a replacement. A confirmed adapter-off epoch releases
+up. A transient `RECOVERY_BLOCKED` source error does not retain the lease after
+successful cleanup. Cleanup failure keeps the same-device lease reserved so an
+unresolved transport cannot overlap a replacement. A confirmed adapter-off epoch releases
 cleanup-failed BLE leases because the native transport clears its old GATT
 owners before publishing that state. Other failed cleanup remains blocked until
 the manager restarts. Cancellation is checked again after an asynchronous
@@ -555,6 +556,8 @@ adapter loss affects only BLE attempts, explicit disconnect affects the
 matching role, and shutdown affects all attempts. Direct connects stop an
 active background scale watch before transport connection; a connect initiated
 by that watch keeps its watch generation and can rearm after failure.
+BLE cancellation also removes the matching pending native attempt and prevents
+ordinary scan-settle and quick-connect retry waits from starting it later.
 
 ### Disconnect Handling
 

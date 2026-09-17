@@ -117,7 +117,8 @@ owned by that scan; adapter loss invalidates BLE attempts; explicit disconnect
 invalidates the matching role; and shutdown invalidates all attempts before it
 waits for connection work. A late successful stale candidate is disconnected
 before its lease is released. A failed source is cleaned up before release;
-failed cleanup keeps the same-device lease reserved until Android reports an
+`RECOVERY_BLOCKED` alone does not retain the lease after successful cleanup.
+Failed cleanup keeps the same-device lease reserved until Android reports an
 adapter-off epoch. Native adapter-off cleanup clears close recovery, GATT
 ownership, and the device cache before publishing that state, so only then can
 Decaid release cleanup-failed BLE leases. Without that confirmation the lease

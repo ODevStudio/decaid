@@ -2,10 +2,59 @@
 
 - Issue: #877
 - Parent: #871
-- Date: 2026-09-15
+- Updated: 2026-09-17
 - Decision gate: #875 remains open
 
-## Outcome
+## Current software candidate
+
+The simplification pass retains normal reconnect, cancellation, confirmed
+cleanup, and healthy-peer protections. It removes duplicate test runners and
+PR templates, overlapping-attempt tracking, redundant lease state, and an
+extra diagnostic history cache. Requested queue/sample/peer diagnostics remain;
+the latest failure is retained in memory and existing logs hold the history.
+
+| Component | Current revision | Verification |
+| --- | --- | --- |
+| A: Decaid #878 | `9a713b8481c77df540b575149f47d985fb3914bf` | Analysis clean; 4,212 passed / 1 skipped; CI `35205186203` green |
+| B: native #25 | `61846595a0165d315c8e5bd955e753db69e7654b` | Android 63 passed; Flutter 136 passed / 13 skipped; CI `35203547459` green |
+| C: native #28 | `4519bfc476c1c414515049fcbda12288fe62e605` | Android 86 passed; Flutter 141 passed / 13 skipped; CI `35204199277` green |
+| D: Decaid #881, including A | `a355b224e779d50e6c45253d5d8f008c8b16d033` | Analysis clean; 4,332 passed / 1 skipped at runtime head `c6f01d9b`; final change formats two tests only |
+
+Both dependency files pin C. Tests used the published dependency, not a local
+source override. Local Flutter 3.44.8 / Dart 3.12.2 resolved SDK dependencies
+`intl 0.20.2`, `matcher 0.12.19`, `meta 1.18.0`, `test_api 0.7.11`, and
+`vector_math 2.2.0`; these local resolutions are not published as unrelated
+lockfile changes. A's full-test log is `871-a-published-full-tests.log`;
+D's full-test output is retained in the worker session transcript. The linked
+PR checks provide public CI evidence. Initial A/D checks caught formatting
+differences, corrected in the final formatting-only commits above.
+
+### Production-source Android build
+
+`flutter build apk --release --no-pub` passed on runtime head `c6f01d9b` with
+published C. Final D differs only in test formatting. No startup, simulation,
+application-ID, API-port, or hardware-service overlays were used. The APK was
+not installed and no running Decaid instance was touched.
+
+- Package: `net.tadel.reaprime`, version `1.0.0`, versionCode `2804`.
+- APK SHA-256: `C9B5ED5428D180ABE748B9B3DDE545824385FBEFA4A6D105E017CCF2C1AE8167`.
+- Signature verified: Android debug certificate, SHA-256
+  `6ed8176b574069380413702a8777bb28aa18d4f960ab4afac3b52df6a0323625`.
+- Flutter 3.44.8, Gradle 8.14.3, local Android SDK; existing release-signing
+  configuration used an ignored debug keystore. External plugin bundles and
+  the CI-style bundled-skin stub were supplied locally. This verifies source
+  compilation, not production signing or skin/runtime acceptance.
+- The process-local `JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=Z:\issue871-nonexistent`
+  workaround was retained; no global toolchain configuration changed.
+- Raw log: `C:/Users/El Fuzzi/.codex/.tmp/871-d-production-android-build.log`.
+  Existing Java deprecation/unchecked-cast warnings remain; the build passed.
+
+No hardware was accessed during this pass. Affected-device acceptance remains
+deferred, every physical row below is `NOT RUN`, and all PRs remain drafts.
+The following runtime results are historical evidence for their recorded
+revisions, not hardware acceptance of the new source.
+
+## Historical runtime evidence
 
 The narrow Android direct-connect admission and exact-GATT lifecycle design is
 the retained candidate. Host and deterministic software evidence supports its
@@ -15,7 +64,7 @@ original full-height Decent Scale are unavailable. Every affected-device matrix
 row remains `NOT RUN`; #871, #875, and #877 remain open. The supplemental
 Samsung/Bengle BLE run below includes passes and a direct-connect failure.
 
-The candidate is reproducibly pinned to published `universal_ble` PR #28 head
+The earlier acceptance candidate was pinned to published `universal_ble` PR #28 head
 `895aa687a25c99b17c81e8672cac7de051551ded` in both Decaid dependency files.
 Native Android unit tests passed in CI. A side-by-side Android APK was built
 from the combined source plus a temporary simulation-isolation overlay and was
@@ -25,23 +74,7 @@ the unmodified published #881 application source as a release APK.
 Affected-device BLE acceptance remains unrun; supplemental HDS USB and
 Samsung/Bengle BLE results are recorded below.
 
-## Review result
-
-The reviewed A through D software diffs passed their recorded deterministic
-tests. The later hardware run found a pre-existing direct-connect path that
-omits Bengle's virtual scale; it remains unresolved. The Decaid correction
-reuses controller and `ScaleWatch` generation fences and adds only one
-device-id lease owner. Unused diagnostic,
-cancellation-reason, and monotonic-generation state was removed. No second
-watch pause layer, app-global scheduler, global GATT command queue, or new
-dependency was retained.
-
-This result is limited to review, deterministic host tests, native Android CI
-tests, and the explicitly supplemental runtime checks below. Published-source
-Android compilation now passes, but physical acceptance
-remains an open gate. The Linux app compile, package, and launch smoke passed.
-
-## Immutable revisions
+## Historical revisions
 
 | Component | Baseline or inspected revision | Reviewed candidate |
 | --- | --- | --- |
@@ -355,10 +388,12 @@ data.
 
 Baseline and candidate must use identical current scale behavior:
 `displayOff` sends shared `0A 00` and preserves a healthy original-scale link.
-Explicit disconnect power mode is a separate scenario. The only A/B dependency
-variable is published baseline `universal_ble`
-`16bbfbce197eb5913c6b16578363f7dc943e605d` versus published candidate
-`895aa687a25c99b17c81e8672cac7de051551ded`.
+Explicit disconnect power mode is a separate scenario. Before the deferred
+comparison, prepare and pin a reviewed API-compatible baseline derived from
+`16bbfbce197eb5913c6b16578363f7dc943e605d`, without candidate admission/recovery
+behavior. The final app uses new diagnostic/cancellation APIs, so swapping the
+old pin alone is not a buildable comparison. Compare it with current C above;
+keep application behavior and the following numerical criteria unchanged.
 
 For each recovery episode, record peripheral availability and fresh adverts;
 request, admission, native callback, and protocol-ready timestamps; native
@@ -459,11 +494,10 @@ later candidate build must be rolled back:
 
 1. Stop rollout and retain the failing build, its exact lockfile, app logs,
    native logcat, and BLE diagnostic snapshots.
-2. Restore only the `universal_ble` manifest ref to
-   `16bbfbce197eb5913c6b16578363f7dc943e605d`, regenerate the lockfile with the
-   repository Flutter toolchain, and verify both `ref` and `resolved-ref`.
-3. Revert the Decaid attempt-retirement change only if evidence implicates it.
-   Preserve the current original-scale/HDS protocol and `displayOff` fixes.
+2. Restore a previously verified, compatible Decaid/fork pair. Do not change
+   only the native pin while the app calls APIs absent from that revision.
+   Regenerate the lockfile and verify both `ref` and `resolved-ref`.
+3. Preserve the current original-scale/HDS protocol and `displayOff` fixes.
 4. Verify the focused connection tests, analysis, full Flutter suite, and an
    Android build before distributing the rollback.
 5. Repeat the failed matrix row on the same affected hardware. A restored pin
@@ -477,32 +511,14 @@ GATT clients remain outside the direct-admission guarantee.
 
 ## Sign-off state
 
-- Work-session handoff: implementation review and available supplemental tests
-  are complete for this session. No further peripheral tests or worker runs
-  are scheduled. PRs remain draft; no merge or issue closure is implied.
-- Prerequisite software reviews: final A through D heads are reviewed and their
-  recorded CI runs are green.
-- Final A+D combination: isolated merge passed focused diagnostics, focused
-  connection suites, analysis, and the full Flutter suite without code changes.
-- Native Android helper/plugin tests: passed in CI run `35108117215`; host
-  Flutter tests do not validate Kotlin.
-- Candidate Decaid Android app compilation: direct release compilation of
-  unmodified #881 application source passed, with the toolchain, resolved
-  dependencies, signing, and bundled-skin qualifications recorded above.
-  The production-ID APK was not installed. R2/R3 remain separate simulation
-  overlay results, not production-source runtime evidence.
-- Supplemental runtime: R2 exposed missing mock-scale emission after reconnect.
-  R3 passed the requested two same-process mock machine/scale readiness cycles
-  after the focused fix. This does not close a physical acceptance row.
-- Supplemental physical BLE: Samsung/Bengle normal reconnects and the short
-  screen-off check passed. Direct REST connection omitted the integrated scale;
-  that pre-existing application-path defect remains unresolved. No affected
-  matrix row or long-term resource criterion is satisfied by this run.
-- Exact candidate dependency pin: satisfied at published PR #28 head
-  `895aa687a25c99b17c81e8672cac7de051551ded`.
-- Affected-device matrix: `NOT RUN`.
-- Maintainer hardware sign-off: pending.
-- #871, #875, and #877: remain open.
+- Current source and software results are recorded at the top of this document.
+- Earlier R2/R3 overlays, including the unpublished MockScale fix, remain
+  simulation evidence only. R2's reconnect failure is not superseded by R3.
+- Samsung/Bengle and HDS USB runs are supplemental; Bengle's internal scale is
+  not a second BLE peer. The pre-existing direct-REST virtual-scale defect
+  remains outside this issue's native recovery scope.
+- Affected-device matrix: `NOT RUN`; maintainer hardware sign-off is pending.
+- PRs remain drafts. #871, #875, and #877 remain open.
 
 ### Peripheral cup-response follow-up
 

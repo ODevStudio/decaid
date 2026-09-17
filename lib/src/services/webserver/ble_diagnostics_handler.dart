@@ -9,18 +9,6 @@ import 'package:shelf_plus/shelf_plus.dart';
 
 final Stopwatch _bleDiagnosticsClock = Stopwatch()..start();
 
-class _ServiceDiagnosticsSnapshot {
-  final List<Map<String, Object?>> services;
-  final bool complete;
-  final DateTime? sampledAt;
-
-  const _ServiceDiagnosticsSnapshot({
-    required this.services,
-    required this.complete,
-    required this.sampledAt,
-  });
-}
-
 class BleDiagnosticsHandler {
   final DeviceController deviceController;
   final ConnectionManager connectionManager;
@@ -109,18 +97,21 @@ class BleDiagnosticsHandler {
     });
   }
 
-  Future<_ServiceDiagnosticsSnapshot> _serviceDiagnosticsSnapshot() async {
+  Future<
+    ({List<Map<String, Object?>> services, bool complete, DateTime? sampledAt})
+  >
+  _serviceDiagnosticsSnapshot() async {
     final future =
         _servicesDiagnosticsInFlight ?? _startServiceDiagnosticsCollection();
     try {
       final services = await future.timeout(serviceDiagnosticsWaitTimeout);
-      return _ServiceDiagnosticsSnapshot(
+      return (
         services: services,
         complete: true,
         sampledAt: _lastServicesDiagnosticsAt,
       );
     } on TimeoutException {
-      return _ServiceDiagnosticsSnapshot(
+      return (
         services: _lastServicesDiagnostics,
         complete: false,
         sampledAt: _lastServicesDiagnosticsAt,
@@ -169,6 +160,9 @@ class BleDiagnosticsHandler {
           'transport': device.transportType.name,
           'instanceId': identityHashCode(device),
           'state': state?.name,
+          if (device is DeviceDiagnosticsCapable)
+            'diagnostics':
+                (device as DeviceDiagnosticsCapable).connectionDiagnostics,
           if (information != null && !information.isEmpty)
             'information': information.toJson(),
         };

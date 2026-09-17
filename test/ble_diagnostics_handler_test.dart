@@ -89,6 +89,9 @@ void main() {
     expect(peer['instanceId'], isA<int>());
     expect(peer['state'], 'connected');
     expect(peer['information'], {'firmwareVersion': '1.1', 'batteryLevel': 88});
+    expect(peer['diagnostics'], {
+      'validSample': {'at': null, 'ageMs': null},
+    });
     expect(body['connection']['preferredMachineId'], isNull);
     expect(body['connection']['preferredScaleId'], isNull);
     expect(body['connection']['conditions'], isEmpty);
@@ -219,7 +222,12 @@ void main() {
   });
 }
 
-class _InfoScale extends TestScale implements DeviceInformationCapable {
+class _InfoScale extends TestScale
+    implements DeviceInformationCapable, DeviceDiagnosticsCapable {
+  @override
+  Map<String, Object?> get connectionDiagnostics => {
+    'validSample': {'at': null, 'ageMs': null},
+  };
   _InfoScale({
     required super.deviceId,
     required super.name,

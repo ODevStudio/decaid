@@ -128,10 +128,18 @@ must not make field diagnostics hang or trigger BLE work.
 The following evidence is intentionally **not fabricated in Decaid** and remains
 owned by the fork/native work package (#27): native request/admission/callback/
 close timestamps, native numeric status, native client identity/owned-client
-count and teardown confirmation. Per-device queue-generation/active-operation
-metadata must be exported at the BLE boundary if it is needed for the final
-field bundle; a webserver handler must not reach around that boundary to import
-third-party BLE implementation details.
+count and teardown confirmation. The final-review diagnostic completion exports
+per-device queue generations, active/pending counts and up to 32 operation
+labels through the BLE transport boundary. Timeout/clear snapshots are captured
+before pending work is removed and retained with same-boundary peer state
+(latest failure only, up to 32 peers; history stays in the app log). Raw
+notification age and successfully parsed machine/weight sample age are separate;
+neither endpoint reads nor replayed
+machine samples refresh them. No payloads or additional BLE work are collected.
+
+These additions require the updated native-fork API and therefore an updated
+candidate pin, unlike the initial diagnostics draft. The immutable matrix above
+records the earlier evidence, not the final source heads; part 5 records those.
 
 For field correlation, capture the exported diagnostic report and native
 `UniversalBle` logcat together. A Dart-only support bundle must not be described
@@ -152,6 +160,13 @@ as proof of native GATT disposal.
 Identical to A except for the reviewed immutable `tadelv/universal_ble` commit
 produced by work packages #26/#27. Do not combine the comparison with another
 scale protocol, retry, timeout or power-policy change.
+
+Before running the deferred hardware comparison, prepare an API-compatible
+baseline: the final application uses new fork diagnostic/cancellation methods,
+so substituting the unmodified `16bbfbce` pin is no longer a buildable A/B
+procedure. Any compatibility-only baseline changes must be reviewed and pinned,
+without importing candidate admission/recovery behavior. Keep application and
+scale-power behavior identical and retain the numerical criteria below.
 
 ### Measurements
 

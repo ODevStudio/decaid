@@ -68,7 +68,9 @@ alive.
 
 The quick-connect retry is host policy. It must remain a single retry owner:
 waiting for native admission is not a connect failure and must not consume a
-retry/backoff slot.
+retry/backoff slot. Native `RECOVERY_BLOCKED` is surfaced without consuming
+that retry, and the Decaid device lease remains owned until adapter reset clears
+the lower recovery barrier.
 
 ### Direct machine / scale connect
 

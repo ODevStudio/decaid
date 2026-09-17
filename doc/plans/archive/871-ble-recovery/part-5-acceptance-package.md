@@ -18,7 +18,7 @@ the latest failure is retained in memory and existing logs hold the history.
 | A: Decaid #878 | `9a713b8481c77df540b575149f47d985fb3914bf` | Analysis clean; 4,212 passed / 1 skipped; CI `35205186203` green |
 | B: native #25 | `61846595a0165d315c8e5bd955e753db69e7654b` | Android 63 passed; Flutter 136 passed / 13 skipped; CI `35203547459` green |
 | C: native #28 | `4519bfc476c1c414515049fcbda12288fe62e605` | Android 86 passed; Flutter 141 passed / 13 skipped; CI `35204199277` green |
-| D: Decaid #881, including A | `a355b224e779d50e6c45253d5d8f008c8b16d033` | Analysis clean; 4,332 passed / 1 skipped at runtime head `c6f01d9b`; final change formats two tests only |
+| D: Decaid #881, including A | `a355b224e779d50e6c45253d5d8f008c8b16d033` | Local 4,332 passed / 1 skipped at runtime head `c6f01d9b`; final CI `35206363388` green, including analysis, full tests, slow-suite gate and Linux build/launch |
 
 Both dependency files pin C. Tests used the published dependency, not a local
 source override. Local Flutter 3.44.8 / Dart 3.12.2 resolved SDK dependencies

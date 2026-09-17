@@ -721,9 +721,11 @@ void main() {
         final prefixes = platform.startScanCalls
             .map((c) => c.filter?.withNamePrefix ?? const <String>[])
             .toList();
-        expect(prefixes.first, [
-          'Decent Scale',
-        ], reason: 'the raced watch start settles before the burst starts');
+        expect(
+          prefixes.first,
+          ['Decent Scale'],
+          reason: 'the raced watch start settles before the burst starts',
+        );
         expect(
           prefixes[1],
           isEmpty,
@@ -983,6 +985,56 @@ void main() {
   });
 
   group('quick-connect identity policy', () {
+    test(
+      'cancellation during retry delay prevents a later native start',
+      () async {
+        const deviceId = 'AA:BB:CC:DD:EE:22';
+        final firstAttempt = Completer<void>();
+        var connectCalls = 0;
+        final transport = _TrackingFakeBleTransport(
+          deviceId: deviceId,
+          onConnect: () async {
+            connectCalls++;
+            if (connectCalls == 1) {
+              firstAttempt.complete();
+              throw BleConnectException(
+                code: 'connectionFailed',
+                description: 'simulated retryable failure',
+                function: 'connect',
+              );
+            }
+          },
+        );
+        final sut = UniversalBleDiscoveryService(
+          requiresSystemDevice: () => false,
+          transportFactory:
+              ({
+                required device,
+                required stopScan,
+                required requestLargeMtuNonAndroid,
+                required lifecycleGate,
+              }) => transport,
+        );
+        addTearDown(sut.dispose);
+        await sut.initialize();
+
+        final quickConnect = sut.tryQuickConnect(
+          const RememberedDevice(
+            id: deviceId,
+            name: 'DE1',
+            type: domain.DeviceType.machine,
+            implementation: DeviceImplementation.unifiedDe1,
+            transportType: TransportType.ble,
+          ),
+        );
+        await firstAttempt.future;
+        await sut.cancelConnectionAttempt(deviceId);
+
+        expect(await quickConnect, isNull);
+        expect(connectCalls, 1);
+      },
+    );
+
     test('quick-connect does not retry recovery-blocked admission', () async {
       const deviceId = 'AA:BB:CC:DD:EE:21';
       var connectCalls = 0;

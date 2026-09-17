@@ -31,11 +31,10 @@ timeout. Direct controller connects disarm the existing scale watch before
 native connection work, preserving one scan/watch owner instead of adding a
 second scheduler.
 
-The dependency is pinned to reviewed `universal_ble#28` head
-`895aa687a25c99b17c81e8672cac7de051551ded`. Pull-request run `35108117215`
-passed the Android helper/plugin tests and all other jobs on merge commit
-`e3ddd73beab1bfb1447abb65fad44438239936e6`, whose parents are the exact
-admission base `a5cc8dd727a2f7da6822eccdc968038839fe0bb9` and lifecycle head.
+The dependency is pinned to integration head
+`4519bfc476c1c414515049fcbda12288fe62e605`. It contains the reviewed
+admission and lifecycle work, exact direct-connect cancellation, bounded queue
+diagnostics, and the normal-JUnit admission regression cleanup.
 
 ## Entry-point inventory
 
@@ -69,8 +68,9 @@ alive.
 The quick-connect retry is host policy. It must remain a single retry owner:
 waiting for native admission is not a connect failure and must not consume a
 retry/backoff slot. Native `RECOVERY_BLOCKED` is surfaced without consuming
-that retry, and the Decaid device lease remains owned until adapter reset clears
-the lower recovery barrier.
+that retry. Confirmed cleanup releases the Decaid device lease so a later retry
+can proceed; a failed cleanup retains ownership until adapter reset clears the
+lower recovery barrier.
 
 ### Direct machine / scale connect
 
@@ -181,7 +181,7 @@ Decaid remains the retry-policy owner:
 | caller timeout while source still runs | cancel exact lease, return timeout, keep slot owned; cleanup only after source settlement |
 | adapter off | invalidate BLE attempts, stop scans/watch, wait for powered-on recovery epoch |
 | stale completion from older generation | discard; it cannot mutate controller preference/readiness |
-| teardown failure / `RECOVERY_BLOCKED` | keep ownership, surface diagnostics, do not start same-device replacement |
+| teardown failure / `RECOVERY_BLOCKED` | surface diagnostics; release after confirmed cleanup, otherwise keep ownership and reject same-device replacement |
 | unexpected disconnect after healthy ready | existing machine/scale recovery policy owns retry |
 | background watch stop for connect | transition both lower scan owner and upper watch state before native stop |
 | shutdown | invalidate attempts first, await exact source + owned cleanup, then finish teardown |

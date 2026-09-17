@@ -609,7 +609,7 @@ void main() {
       });
 
       test(
-        'quick-connect recovery block retains ownership and skips scan fallback',
+        'quick-connect recovery block surfaces without retaining ownership',
         () async {
           await connectionManager.dispose();
           await settingsController.setPreferredMachineId('blocked-de1');
@@ -655,26 +655,10 @@ void main() {
             connectionManager.currentStatus.error?.details?['ble_description'],
             contains('RECOVERY_BLOCKED:'),
           );
-
-          await connectionManager.connect();
-          expect(mockScanner.quickConnectCallCount, 1);
-          expect(mockScanner.scanCallCount, 0);
           expect(
             (await connectionManager.connectMachine(
               _FakeDe1(
                 deviceId: 'BLOCKED-DE1',
-                transportType: TransportType.ble,
-              ),
-            )).outcome,
-            ConnectionOutcome.conflict,
-          );
-
-          mockScanner.mockAdapterState(AdapterState.poweredOff);
-          await Future<void>.delayed(Duration.zero);
-          expect(
-            (await connectionManager.connectMachine(
-              _FakeDe1(
-                deviceId: 'blocked-de1',
                 transportType: TransportType.ble,
               ),
             )).outcome,
@@ -683,6 +667,48 @@ void main() {
           await remembered.dispose();
         },
       );
+
+      test('shutdown cancels an in-flight quick-connect attempt', () async {
+        await connectionManager.dispose();
+        await settingsController.setPreferredMachineId('queued-quick-de1');
+        mockSettingsService.setRememberedDevices(
+          RememberedDevice.encodeList([
+            const RememberedDevice(
+              id: 'queued-quick-de1',
+              name: 'DE1',
+              type: DeviceType.machine,
+              implementation: DeviceImplementation.unifiedDe1,
+              transportType: TransportType.ble,
+            ),
+          ]),
+        );
+        final remembered = RememberedDevicesController(
+          machineConnections: const Stream.empty(),
+          scaleConnections: const Stream.empty(),
+          settings: mockSettingsService,
+        );
+        await remembered.initialize();
+        final quickConnect = Completer<Device?>();
+        mockScanner.quickConnectCompleter = quickConnect;
+        mockScanner.onCancelConnectionAttempt = (_) async {
+          quickConnect.complete();
+        };
+        connectionManager = ConnectionManager(
+          deviceScanner: mockScanner,
+          de1Controller: mockDe1Controller,
+          scaleController: mockScaleController,
+          settingsController: settingsController,
+          rememberedDevices: remembered,
+        );
+
+        final connecting = connectionManager.connect();
+        await Future<void>.delayed(Duration.zero);
+        await connectionManager.shutdown();
+        await connecting;
+
+        expect(mockScanner.cancelledConnectionAttempts, ['queued-quick-de1']);
+        await remembered.dispose();
+      });
 
       test(
         'cancelled adopted quick-connect marks cleanup as expected',
@@ -2654,7 +2680,7 @@ void main() {
       });
 
       test(
-        'recovery-blocked BLE source retains its lease until adapter reset',
+        'recovery-blocked BLE source releases after successful cleanup',
         () async {
           mockDe1Controller.failNextConnectWith = BleConnectException(
             code: 'connectionFailed',
@@ -2674,19 +2700,6 @@ void main() {
             (await connectionManager.connectMachine(
               _FakeDe1(
                 deviceId: 'BLOCKED-SOURCE-MACHINE',
-                transportType: TransportType.ble,
-              ),
-            )).outcome,
-            ConnectionOutcome.conflict,
-          );
-
-          mockScanner.mockAdapterState(AdapterState.poweredOff);
-          await Future<void>.delayed(Duration.zero);
-
-          expect(
-            (await connectionManager.connectMachine(
-              _FakeDe1(
-                deviceId: 'blocked-source-machine',
                 transportType: TransportType.ble,
               ),
             )).outcome,
@@ -4346,6 +4359,7 @@ void main() {
       final machine = _FakeDe1(
         deviceId: 'preferred-machine',
         disconnectStarted: disconnectStarted,
+        transportType: TransportType.ble,
       );
       mockScanner.addDevice(machine);
 
@@ -4359,6 +4373,7 @@ void main() {
       await disconnectStarted.future;
       await connecting;
       expect(localSettings.preferredMachineId, isNull);
+      expect(mockScanner.cancelledConnectionAttempts, [machine.deviceId]);
     });
 
     test('clears pending ambiguity when a session is active', () async {

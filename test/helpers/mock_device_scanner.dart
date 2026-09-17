@@ -19,6 +19,9 @@ class MockDeviceScanner implements DeviceScanner {
 
   int stopScanCallCount = 0;
 
+  final List<String> cancelledConnectionAttempts = [];
+  Future<void> Function(String deviceId)? onCancelConnectionAttempt;
+
   int scanCallCount = 0;
 
   Completer<void>? scanCompleter;
@@ -143,8 +146,15 @@ class MockDeviceScanner implements DeviceScanner {
     stopScanCallCount++;
   }
 
+  @override
+  Future<void> cancelConnectionAttempt(String deviceId) async {
+    cancelledConnectionAttempts.add(deviceId);
+    await onCancelConnectionAttempt?.call(deviceId);
+  }
+
   Device? quickConnectResult;
   Object? quickConnectError;
+  Completer<Device?>? quickConnectCompleter;
 
   int quickConnectCallCount = 0;
 
@@ -154,6 +164,8 @@ class MockDeviceScanner implements DeviceScanner {
     final error = quickConnectError;
     quickConnectError = null;
     if (error != null) throw error;
+    final completer = quickConnectCompleter;
+    if (completer != null) return completer.future;
     return quickConnectResult;
   }
 

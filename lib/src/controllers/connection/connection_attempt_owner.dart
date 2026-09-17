@@ -27,7 +27,7 @@ class ConnectionAttemptOwner {
   }
 
   bool _isCurrent(ConnectionAttemptLease lease) =>
-      identical(_active[lease._key], lease) && !lease._settled;
+      identical(_active[lease._key], lease);
 
   Iterable<ConnectionAttemptLease> get active =>
       List.unmodifiable(_active.values);
@@ -47,11 +47,7 @@ class ConnectionAttemptOwner {
   }
 
   bool _settle(ConnectionAttemptLease lease) {
-    if (!_isCurrent(lease)) {
-      lease._settled = true;
-      return false;
-    }
-    lease._settled = true;
+    if (!_isCurrent(lease)) return false;
     _active.remove(lease._key);
     return true;
   }
@@ -72,7 +68,6 @@ class ConnectionAttemptLease {
   final bool ble;
 
   bool _cancelled = false;
-  bool _settled = false;
   bool _cleanupFailed = false;
 
   ConnectionAttemptLease._({
@@ -91,7 +86,7 @@ class ConnectionAttemptLease {
 
   bool get cleanupFailed => _cleanupFailed;
 
-  bool get mayAdopt => !_cancelled && !_settled && _owner._isCurrent(this);
+  bool get mayAdopt => !_cancelled && _owner._isCurrent(this);
 
   bool cancel() => _owner._cancel(this);
 

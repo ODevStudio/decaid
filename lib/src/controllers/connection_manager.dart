@@ -863,7 +863,21 @@ class ConnectionManager {
   }
 
   void _cancelAttempt(ConnectionAttemptLease attempt) {
-    if (!attempt.cancel() || !attempt.controllerOwned) return;
+    if (!attempt.cancel()) return;
+    if (attempt.ble) {
+      unawaited(
+        deviceScanner
+            .cancelConnectionAttempt(attempt.deviceId)
+            .catchError(
+              (Object error, StackTrace stackTrace) => _log.warning(
+                'Failed to cancel connection attempt for ${attempt.deviceId}',
+                error,
+                stackTrace,
+              ),
+            ),
+      );
+    }
+    if (!attempt.controllerOwned) return;
     switch (attempt.role) {
       case ConnectionAttemptRole.machine:
         de1Controller.invalidatePendingConnectionAttempt();
@@ -895,10 +909,6 @@ class ConnectionManager {
       sourceError = error;
       sourceStack = stackTrace;
     }
-    final recoveryBlocked =
-        attempt.ble &&
-        sourceError is BleConnectException &&
-        sourceError.recoveryBlocked;
     var cleanupSucceeded = true;
     try {
       final mayAdopt = attempt.mayAdopt;
@@ -918,9 +928,6 @@ class ConnectionManager {
             stackTrace,
           );
           Error.throwWithStackTrace(error, stackTrace);
-        }
-        if (recoveryBlocked && adapterResetEpoch == _adapterResetEpoch) {
-          attempt.markCleanupFailed();
         }
         if (mayAdopt && sourceError != null) {
           Error.throwWithStackTrace(sourceError, sourceStack!);
@@ -1161,18 +1168,8 @@ class ConnectionManager {
         return device;
       }
     } on BleConnectException catch (e, st) {
-      if (e.recoveryBlocked && attempt.ble) {
-        if (adapterResetEpoch != _adapterResetEpoch) {
-          _log.info(
-            'Quick-connect recovery block cleared by adapter reset for $machineId',
-          );
-          return null;
-        }
-        attempt.markCleanupFailed();
-        _log.warning('Quick-connect recovery blocked for $machineId', e, st);
-        rethrow;
-      }
       _log.warning('Quick-connect: machine attempt failed', e, st);
+      if (e.recoveryBlocked) rethrow;
     } catch (e, st) {
       _log.warning('Quick-connect: machine attempt failed', e, st);
     } finally {

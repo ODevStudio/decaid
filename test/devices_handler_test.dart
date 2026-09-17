@@ -19,6 +19,7 @@ import 'helpers/mock_device_discovery_service.dart';
 import 'helpers/mock_settings_service.dart';
 import 'helpers/test_scale.dart';
 import 'helpers/test_sensor.dart';
+import 'helpers/test_grinder.dart';
 
 void main() {
   late DeviceController deviceController;
@@ -331,6 +332,36 @@ void main() {
     });
 
     group('disconnect', () {
+      test(
+        'disconnects the requested grinder instead of the selected one',
+        () async {
+          final selected = TestGrinder(deviceId: 'selected');
+          final requested = TestGrinder(deviceId: 'requested');
+          addTearDown(selected.dispose);
+          addTearDown(requested.dispose);
+          mockDiscovery.addDevice(selected);
+          mockDiscovery.addDevice(requested);
+          await Future<void>.delayed(Duration.zero);
+          expect(
+            (await connectionManager.connectGrinder(selected)).success,
+            isTrue,
+          );
+
+          final response = await sendPut(
+            '/api/v1/devices/disconnect',
+            body: jsonEncode({'deviceId': requested.deviceId}),
+          );
+
+          expect(response.statusCode, 200);
+          expect(requested.disconnectCalls, 1);
+          expect(selected.disconnectCalls, 0);
+          expect(
+            connectionManager.grinderController.connectedGrinder(),
+            same(selected),
+          );
+        },
+      );
+
       test('reads deviceId from JSON body', () async {
         mockDiscovery.addDevice(
           TestScale(deviceId: 'scale-1', name: 'My Scale'),

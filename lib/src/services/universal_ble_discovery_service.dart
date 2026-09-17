@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:reaprime/src/models/adapter_state.dart';
 import 'package:reaprime/src/models/device/device_implementation.dart';
@@ -41,7 +42,7 @@ class _AdvertisementStats {
 }
 
 class UniversalBleDiscoveryService extends BleDiscoveryService
-    implements DeviceWatchCapable {
+    implements DeviceWatchCapable, ConnectionAttemptCancellation {
   UniversalBleDiscoveryService({
     bool Function()? watchSupportGate,
     bool Function()? requiresSystemDevice,
@@ -176,12 +177,39 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
   bool Function() requestLargeMtuNonAndroid;
 
   BLETransport _createTransport(BleDevice device) {
-    return _transportFactory(
+    final transport = _transportFactory(
       device: device,
       stopScan: _stopScanForConnect,
       requestLargeMtuNonAndroid: requestLargeMtuNonAndroid(),
       lifecycleGate: _lifecycleGate,
     );
+    transport.onDiagnosticBoundary = _recordDiagnosticBoundary;
+    return transport;
+  }
+
+  Map<String, Object?>? _lastDiagnosticFailure;
+
+  void _recordDiagnosticBoundary(Map<String, Object?> failure) {
+    if (_disposed) return;
+    final snapshot = <String, Object?>{
+      'failure': failure,
+      'adapterState': _adapterStateSubject.value.name,
+      'adapterGeneration': _watchAdapterGeneration,
+      'scanOwner': _scanOwner.name,
+      'scanPhase': _scanPhase.name,
+      'peers': [
+        for (final peer in _devices.values.take(32))
+          {
+            'deviceId': peer.deviceId,
+            'instanceId': identityHashCode(peer),
+            if (peer is DeviceDiagnosticsCapable)
+              'diagnostics':
+                  (peer as DeviceDiagnosticsCapable).connectionDiagnostics,
+          },
+      ],
+    };
+    _lastDiagnosticFailure = snapshot;
+    log.info('BLE diagnostic boundary: ${jsonEncode(snapshot)}');
   }
 
   @override
@@ -597,6 +625,7 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
 
     return {
       'serviceInstanceId': identityHashCode(this),
+      'lastFailure': _lastDiagnosticFailure,
       'adapterState': _adapterStateSubject.value.name,
       'scan': {
         'owner': _scanOwner.name,
@@ -1145,7 +1174,11 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
 
   @override
   Future<Device?> tryQuickConnect(RememberedDevice remembered) async {
+    final cancellationEpoch = _lifecycleGate.connectionCancellationEpoch(
+      remembered.id,
+    );
     await _plugins?.registry.ready;
+    _lifecycleGate.checkConnectionAttempt(remembered.id, cancellationEpoch);
     if (_disposed || remembered.implementation == DeviceImplementation.plugin) {
       return null;
     }
@@ -1157,13 +1190,20 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
 
     return _candidate(
       remembered.id,
-      () => _tryQuickConnectCandidate(remembered, impl),
+      () => _tryQuickConnectCandidate(remembered, impl, cancellationEpoch),
     );
+  }
+
+  @override
+  Future<void> cancelConnectionAttempt(String deviceId) {
+    _lifecycleGate.cancelConnectionAttempts(deviceId);
+    return UniversalBle.cancelConnectionAttempt(deviceId);
   }
 
   Future<Device?> _tryQuickConnectCandidate(
     RememberedDevice remembered,
     DeviceImplementation impl,
+    int cancellationEpoch,
   ) async {
     final deviceId = remembered.id;
     final key = normalizeBleDeviceId(deviceId);
@@ -1171,6 +1211,7 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
     BleDevice? bleDevice;
     if (_requiresSystemDevice()) {
       bleDevice = await _findSystemDevice(deviceId);
+      _lifecycleGate.checkConnectionAttempt(deviceId, cancellationEpoch);
       if (bleDevice == null) {
         log.info('Quick-connect: device $deviceId not in system cache');
         return null;
@@ -1201,7 +1242,7 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
     }
 
     try {
-      await _connectWithRetry(device);
+      await _connectWithRetry(device, deviceId, cancellationEpoch);
       if (device is Machine) {
         final model = device.machineInfo.model;
         final expectedBengle = impl == DeviceImplementation.bengle;
@@ -1225,6 +1266,22 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
       await _adoptCachedDevice(key, device);
       log.info('Quick-connect succeeded for $deviceId');
       return device;
+    } on BleConnectException catch (e, st) {
+      if (e.recoveryBlocked) {
+        log.warning('Quick-connect recovery blocked for $deviceId', e, st);
+        try {
+          await transport.dispose();
+        } catch (_) {}
+        rethrow;
+      }
+      log.warning('Quick-connect failed for $deviceId', e, st);
+      try {
+        await device.disconnect();
+      } catch (_) {}
+      try {
+        await transport.dispose();
+      } catch (_) {}
+      return null;
     } catch (e, st) {
       log.warning('Quick-connect failed for $deviceId', e, st);
       try {
@@ -1254,16 +1311,26 @@ class UniversalBleDiscoveryService extends BleDiscoveryService
     return null;
   }
 
-  Future<void> _connectWithRetry(Device device) async {
+  Future<void> _connectWithRetry(
+    Device device,
+    String deviceId,
+    int cancellationEpoch,
+  ) async {
+    _lifecycleGate.checkConnectionAttempt(deviceId, cancellationEpoch);
     try {
       await device.onConnect();
+      _lifecycleGate.checkConnectionAttempt(deviceId, cancellationEpoch);
     } on BleConnectException catch (e) {
+      if (e.recoveryBlocked) rethrow;
       log.info('Quick-connect GATT error ($e), retrying once after 1s');
       await Future.delayed(const Duration(seconds: 1));
+      _lifecycleGate.checkConnectionAttempt(deviceId, cancellationEpoch);
       try {
         await device.disconnect();
       } catch (_) {}
+      _lifecycleGate.checkConnectionAttempt(deviceId, cancellationEpoch);
       await device.onConnect();
+      _lifecycleGate.checkConnectionAttempt(deviceId, cancellationEpoch);
     }
   }
 

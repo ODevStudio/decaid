@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reaprime/src/models/device/device.dart' as device;
 import 'package:reaprime/src/models/errors.dart';
 import 'package:reaprime/src/plugins/plugin_ble_session.dart';
+import 'package:reaprime/src/services/ble/ble_lifecycle_gate.dart';
 import 'package:reaprime/src/services/ble/universal_ble_transport.dart';
 import 'package:universal_ble/universal_ble.dart';
 
@@ -256,6 +257,89 @@ void main() {
     );
   }
 
+  test(
+    'diagnostics capture queue boundary and raw input without payload',
+    () async {
+      final failures = <Map<String, Object?>>[];
+      transport.onDiagnosticBoundary = failures.add;
+      await transport.subscribe(_serviceUuid, _charUuid, (_) {});
+      expect(transport.diagnostics['rawNotification'], {
+        'at': null,
+        'ageMs': null,
+      });
+      platform.updateCharacteristicValue(
+        deviceId,
+        _charUuid,
+        Uint8List.fromList([201]),
+        null,
+      );
+      await pump(1);
+      expect(
+        (transport.diagnostics['rawNotification'] as Map)['at'],
+        isA<String>(),
+      );
+      platform.hangWrites = true;
+      platform.writeBlocker = Completer<void>();
+      final first = timedOutWrite();
+      final second = transport.write(
+        _serviceUuid,
+        _charUuid,
+        Uint8List.fromList([202]),
+      );
+      final cancelled = expectLater(
+        second,
+        throwsA(isA<UniversalBleException>()),
+      );
+      await first;
+      await cancelled;
+      final boundary = failures.first;
+      final queue = boundary['queue'] as Map;
+      expect(boundary['reason'], 'timeout');
+      expect(queue['generation'], isA<int>());
+      expect(queue['activeOperations'], 1);
+      expect(queue['pendingOperations'], 1);
+      expect(queue['activeOperationLabels'], [
+        'write/$_serviceUuid/$_charUuid',
+      ]);
+      expect(queue['pendingOperationLabels'], [
+        'write/$_serviceUuid/$_charUuid',
+      ]);
+      expect(boundary.toString(), isNot(contains('[201]')));
+      expect(boundary.toString(), isNot(contains('[202]')));
+      platform.writeBlocker!.complete();
+      await pump(100);
+      expect(queue['activeOperations'], 1);
+      expect((transport.diagnostics['queue'] as Map)['activeOperations'], 0);
+    },
+  );
+
+  test('retired diagnostic observer ignores a replacement transport', () async {
+    final oldBoundaries = <Map<String, Object?>>[];
+    transport.onDiagnosticBoundary = oldBoundaries.add;
+    await transport.disconnect();
+    final count = oldBoundaries.length;
+    final replacement = UniversalBleTransport(
+      device: bleDevice(deviceId),
+      isAndroidOverride: false,
+      isLinuxOverride: false,
+    );
+    await replacement.connect();
+    platform.hangWrites = true;
+    platform.writeBlocker = Completer<void>();
+    await expectLater(
+      replacement.write(
+        _serviceUuid,
+        _charUuid,
+        Uint8List(1),
+        timeout: _writeTimeout,
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+    expect(oldBoundaries, hasLength(count));
+    platform.writeBlocker!.complete();
+    await replacement.dispose();
+  });
+
   test('confirmed disconnect retains ownership until a native event', () async {
     platform.emitDisconnectEvent = false;
     platform.disconnectRequested = Completer<void>();
@@ -283,6 +367,36 @@ void main() {
       );
     },
   );
+
+  test('cancel during Android scan settle prevents native connect', () async {
+    final gate = BleLifecycleGate();
+    final stopScanStarted = Completer<void>();
+    final releaseStopScan = Completer<void>();
+    final android = UniversalBleTransport(
+      device: bleDevice('$deviceId-android'),
+      stopScan: () async {
+        stopScanStarted.complete();
+        await releaseStopScan.future;
+      },
+      isAndroidOverride: true,
+      isLinuxOverride: false,
+      lifecycleGate: gate,
+    );
+    addTearDown(android.dispose);
+    final connectCallsBefore = platform.connectCalls;
+
+    final connecting = android.connect();
+    await stopScanStarted.future;
+    gate.cancelConnectionAttempts(android.id);
+    await UniversalBle.cancelConnectionAttempt(android.id);
+    releaseStopScan.complete();
+
+    await expectLater(
+      connecting,
+      throwsA(isA<BleConnectionAttemptCancelled>()),
+    );
+    expect(platform.connectCalls, connectCallsBefore);
+  });
 
   test(
     'unsubscribe removes forwarding and disables native notification',
@@ -1006,12 +1120,16 @@ void main() {
       await pump();
 
       for (var i = 0; i < chars.length; i++) {
-        expect(newReceived[i], [
-          (i + 1) * 10,
-        ], reason: 'new callback for ${chars[i]} must receive the push');
-        expect(oldReceived[i], [
-          i + 1,
-        ], reason: 'old callback for ${chars[i]} must NOT receive the push');
+        expect(
+          newReceived[i],
+          [(i + 1) * 10],
+          reason: 'new callback for ${chars[i]} must receive the push',
+        );
+        expect(
+          oldReceived[i],
+          [i + 1],
+          reason: 'old callback for ${chars[i]} must NOT receive the push',
+        );
       }
     });
 

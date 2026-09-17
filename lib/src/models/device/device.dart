@@ -40,6 +40,10 @@ abstract interface class DeviceInformationCapable {
   Stream<DeviceInformation?> get deviceInformation;
 }
 
+abstract interface class DeviceDiagnosticsCapable {
+  Map<String, Object?> get connectionDiagnostics;
+}
+
 enum ConnectionState {
   discovered,
   connecting,
@@ -64,4 +68,8 @@ abstract class DeviceDiscoveryService {
   Future<Device?> tryQuickConnect(RememberedDevice remembered) async {
     return null;
   }
+}
+
+abstract interface class ConnectionAttemptCancellation {
+  Future<void> cancelConnectionAttempt(String deviceId);
 }

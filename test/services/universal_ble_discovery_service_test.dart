@@ -15,6 +15,7 @@ import 'package:reaprime/src/models/device/device_implementation.dart';
 import 'package:reaprime/src/models/device/impl/de1/de1.models.dart';
 import 'package:reaprime/src/models/device/machine.dart';
 import 'package:reaprime/src/models/device/remembered_device.dart';
+import 'package:reaprime/src/models/device/transport/ble_connect_exception.dart';
 import 'package:reaprime/src/models/device/transport/data_transport.dart';
 import 'package:reaprime/src/settings/feature_flags.dart';
 import 'package:reaprime/src/settings/settings_controller.dart';
@@ -173,6 +174,15 @@ class _FakeBlePlatform extends UniversalBlePlatform {
   Future<List<BleDevice>> getSystemDevices(List<String>? withServices) async {
     return List<BleDevice>.unmodifiable(systemDevices);
   }
+}
+
+class _DiagnosticTransport extends FakeBleTransport {
+  _DiagnosticTransport(this.id);
+  @override
+  final String id;
+  String state = 'connected';
+  @override
+  Map<String, Object?> get diagnostics => {'state': state};
 }
 
 class _TrackingFakeBleTransport extends FakeBleTransport {
@@ -339,6 +349,60 @@ void main() {
       platform.startScanCalls.last;
 
   group('startDeviceWatch', () {
+    test(
+      'latest failure retains same-boundary peer state without BLE work',
+      () async {
+        final transports = <String, _DiagnosticTransport>{};
+        final sut = UniversalBleDiscoveryService(
+          watchSupportGate: () => true,
+          transportFactory:
+              ({
+                required device,
+                required stopScan,
+                required requestLargeMtuNonAndroid,
+                required lifecycleGate,
+              }) {
+                final transport = _DiagnosticTransport(device.deviceId);
+                transports[device.deviceId] = transport;
+                return transport;
+              },
+        );
+        addTearDown(sut.dispose);
+        await sut.initialize();
+        await sut.startDeviceWatch(_watchFilter);
+        for (final id in ['peer-a', 'peer-b']) {
+          platform.updateScanResult(
+            BleDevice(deviceId: id, name: 'Decent Scale'),
+          );
+        }
+        await pump();
+        expect(transports, hasLength(2));
+        transports['peer-a']!.onDiagnosticBoundary!({
+          'deviceId': 'peer-a',
+          'reason': 'timeout',
+        });
+        transports['peer-b']!.state = 'disconnected';
+        final snapshot = await sut.diagnostics();
+        final first = snapshot['lastFailure'] as Map;
+        final peers = first['peers'] as List;
+        final healthy = peers.cast<Map>().singleWhere(
+          (peer) => peer['deviceId'] == 'peer-b',
+        );
+        expect(healthy['diagnostics']['state'], 'connected');
+        transports['peer-a']!.onDiagnosticBoundary!({
+          'deviceId': 'peer-a',
+          'reason': 'confirmedDisconnect',
+        });
+        final latest = (await sut.diagnostics())['lastFailure'] as Map;
+        expect(latest['failure']['reason'], 'confirmedDisconnect');
+        expect(
+          transports.values.expand((transport) => transport.writes),
+          isEmpty,
+        );
+        expect(platform.disconnectCalls, 0);
+      },
+    );
+
     test('starts a name-prefix-filtered balanced scan', () async {
       await service.startDeviceWatch(_watchFilter);
 
@@ -657,9 +721,11 @@ void main() {
         final prefixes = platform.startScanCalls
             .map((c) => c.filter?.withNamePrefix ?? const <String>[])
             .toList();
-        expect(prefixes.first, [
-          'Decent Scale',
-        ], reason: 'the raced watch start settles before the burst starts');
+        expect(
+          prefixes.first,
+          ['Decent Scale'],
+          reason: 'the raced watch start settles before the burst starts',
+        );
         expect(
           prefixes[1],
           isEmpty,
@@ -919,6 +985,106 @@ void main() {
   });
 
   group('quick-connect identity policy', () {
+    test(
+      'cancellation during retry delay prevents a later native start',
+      () async {
+        const deviceId = 'AA:BB:CC:DD:EE:22';
+        final firstAttempt = Completer<void>();
+        var connectCalls = 0;
+        final transport = _TrackingFakeBleTransport(
+          deviceId: deviceId,
+          onConnect: () async {
+            connectCalls++;
+            if (connectCalls == 1) {
+              firstAttempt.complete();
+              throw BleConnectException(
+                code: 'connectionFailed',
+                description: 'simulated retryable failure',
+                function: 'connect',
+              );
+            }
+          },
+        );
+        final sut = UniversalBleDiscoveryService(
+          requiresSystemDevice: () => false,
+          transportFactory:
+              ({
+                required device,
+                required stopScan,
+                required requestLargeMtuNonAndroid,
+                required lifecycleGate,
+              }) => transport,
+        );
+        addTearDown(sut.dispose);
+        await sut.initialize();
+
+        final quickConnect = sut.tryQuickConnect(
+          const RememberedDevice(
+            id: deviceId,
+            name: 'DE1',
+            type: domain.DeviceType.machine,
+            implementation: DeviceImplementation.unifiedDe1,
+            transportType: TransportType.ble,
+          ),
+        );
+        await firstAttempt.future;
+        await sut.cancelConnectionAttempt(deviceId);
+
+        expect(await quickConnect, isNull);
+        expect(connectCalls, 1);
+      },
+    );
+
+    test('quick-connect does not retry recovery-blocked admission', () async {
+      const deviceId = 'AA:BB:CC:DD:EE:21';
+      var connectCalls = 0;
+      final transport = _TrackingFakeBleTransport(
+        deviceId: deviceId,
+        onConnect: () async {
+          connectCalls++;
+          throw BleConnectException(
+            code: 'connectionFailed',
+            description: 'RECOVERY_BLOCKED: unresolved native GATT teardown',
+            function: 'connect',
+          );
+        },
+      );
+      final sut = UniversalBleDiscoveryService(
+        requiresSystemDevice: () => false,
+        transportFactory:
+            ({
+              required device,
+              required stopScan,
+              required requestLargeMtuNonAndroid,
+              required lifecycleGate,
+            }) => transport,
+      );
+      addTearDown(sut.dispose);
+      await sut.initialize();
+
+      await expectLater(
+        sut.tryQuickConnect(
+          const RememberedDevice(
+            id: deviceId,
+            name: 'DE1',
+            type: domain.DeviceType.machine,
+            implementation: DeviceImplementation.unifiedDe1,
+            transportType: TransportType.ble,
+          ),
+        ),
+        throwsA(
+          isA<BleConnectException>().having(
+            (error) => error.recoveryBlocked,
+            'recoveryBlocked',
+            isTrue,
+          ),
+        ),
+      );
+
+      expect(connectCalls, 1);
+      expect(transport.disconnectCalls, 0);
+      expect(transport.disposeCalls, 1);
+    });
     test(
       'quick-connect keeps ownership past the former host timeout',
       () async {

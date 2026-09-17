@@ -863,7 +863,21 @@ class ConnectionManager {
   }
 
   void _cancelAttempt(ConnectionAttemptLease attempt) {
-    if (!attempt.cancel() || !attempt.controllerOwned) return;
+    if (!attempt.cancel()) return;
+    if (attempt.ble) {
+      unawaited(
+        deviceScanner
+            .cancelConnectionAttempt(attempt.deviceId)
+            .catchError(
+              (Object error, StackTrace stackTrace) => _log.warning(
+                'Failed to cancel connection attempt for ${attempt.deviceId}',
+                error,
+                stackTrace,
+              ),
+            ),
+      );
+    }
+    if (!attempt.controllerOwned) return;
     switch (attempt.role) {
       case ConnectionAttemptRole.machine:
         de1Controller.invalidatePendingConnectionAttempt();
@@ -922,7 +936,7 @@ class ConnectionManager {
       }
       return true;
     } finally {
-      if (cleanupSucceeded) attempt.settle();
+      if (cleanupSucceeded && !attempt.cleanupFailed) attempt.settle();
     }
   }
 
@@ -1105,6 +1119,18 @@ class ConnectionManager {
       (d) => d.id == machineId,
     );
     if (remembered == null) return null;
+    final existing = _connectionAttempts.activeFor(machineId);
+    if (existing != null) {
+      if (existing.ble && existing.cleanupFailed) {
+        throw BleConnectException(
+          code: 'connectionFailed',
+          description:
+              'RECOVERY_BLOCKED: retained quick-connect ownership for $machineId',
+          function: 'connect',
+        );
+      }
+      return null;
+    }
     final attempt = _connectionAttempts.acquire(
       machineId,
       role: ConnectionAttemptRole.machine,
@@ -1113,29 +1139,70 @@ class ConnectionManager {
       ble: remembered.transportType == TransportType.ble,
     );
     if (attempt == null) return null;
+    final adapterResetEpoch = _adapterResetEpoch;
     try {
       final device = await deviceScanner.tryQuickConnect(remembered);
       if (device is De1Interface) {
         if (!attempt.mayAdopt) {
-          await device.disconnect();
+          await _cleanupQuickConnectMachine(
+            attempt,
+            device,
+            adapterResetEpoch: adapterResetEpoch,
+            expected: false,
+          );
           return null;
         }
         de1Controller.adoptDevice(device);
         await _disconnectSupervisor.waitForMachine(device.deviceId);
         if (!attempt.mayAdopt) {
-          await device.disconnect();
+          await _cleanupQuickConnectMachine(
+            attempt,
+            device,
+            adapterResetEpoch: adapterResetEpoch,
+            expected: true,
+          );
           return null;
         }
         await _migrateQuickConnectAlias(remembered.id, device.deviceId);
         _log.info('Quick-connect: machine adopted (${device.deviceId})');
         return device;
       }
+    } on BleConnectException catch (e, st) {
+      _log.warning('Quick-connect: machine attempt failed', e, st);
+      if (e.recoveryBlocked) rethrow;
     } catch (e, st) {
       _log.warning('Quick-connect: machine attempt failed', e, st);
     } finally {
-      attempt.settle();
+      if (!attempt.cleanupFailed) attempt.settle();
     }
     return null;
+  }
+
+  Future<void> _cleanupQuickConnectMachine(
+    ConnectionAttemptLease attempt,
+    De1Interface device, {
+    required int adapterResetEpoch,
+    required bool expected,
+  }) async {
+    if (expected) markExpectingDisconnect(device.deviceId);
+    try {
+      await device.disconnect();
+    } catch (error, stackTrace) {
+      _log.warning(
+        'Quick-connect cleanup failed for ${device.deviceId}',
+        error,
+        stackTrace,
+      );
+      if (!attempt.ble || adapterResetEpoch != _adapterResetEpoch) return;
+      attempt.markCleanupFailed();
+      throw BleConnectException(
+        code: 'connectionFailed',
+        description:
+            'RECOVERY_BLOCKED: quick-connect cleanup failed for ${device.deviceId}',
+        function: 'disconnect',
+        cause: error,
+      );
+    }
   }
 
   Future<void> _migrateQuickConnectAlias(
@@ -1217,7 +1284,38 @@ class ConnectionManager {
       _publishStatus(
         currentStatus.copyWith(phase: ConnectionPhase.connectingMachine),
       );
-      final qcMachine = await _tryQuickConnectMachine();
+      De1Interface? qcMachine;
+      try {
+        qcMachine = await _tryQuickConnectMachine();
+      } on BleConnectException catch (error) {
+        if (!error.recoveryBlocked) rethrow;
+        final machineId = settingsController.preferredMachineId;
+        _publishStatus(
+          currentStatus.copyWith(
+            phase: ConnectionPhase.idle,
+            pendingAmbiguity: () => null,
+            activeTargetTransport: () => null,
+          ),
+        );
+        _emit(
+          ConnectionError(
+            kind: ConnectionErrorKind.machineConnectFailed,
+            severity: ConnectionErrorSeverity.error,
+            timestamp: DateTime.now().toUtc(),
+            deviceId: machineId,
+            message:
+                'Bluetooth recovery is blocked by unfinished connection cleanup.',
+            suggestion: 'Toggle Bluetooth off and on, then retry.',
+            details: {
+              if (error.code != null) 'ble_code': error.code,
+              if (error.description != null)
+                'ble_description': error.description,
+              if (error.function != null) 'ble_function': error.function,
+            },
+          ),
+        );
+        return;
+      }
       if (qcMachine != null) {
         if (await _releaseSupersededAutomaticMachine()) return;
         _log.info('Quick-connect: machine connected, proceeding to ready');

@@ -15,7 +15,7 @@ native admission candidate and it is not affected-device validation.
 | --- | --- | --- | --- | --- | --- |
 | #868 field report | `75a1b66c` (build 2772) | historical dependency resolved by that build; do not substitute a later fork revision when reconstructing this run | Android 10, `treble_arm64_bvS-userdebug 10 QQ3A.200805.001 eng.crossg.20210808.170014 test-keys`; affected Teclast-class tablet | Original full-height Decent Scale, reported original FW marker `0x02` -> 1.1. At that revision `displayOff` fell back to BLE disconnect when HDS SoftSleep was unavailable. | Original-scale protocol negotiation succeeded; valid notifications were received; a later native `Connection Timeout` occurred on the scale without the old periodic-maintenance-write signature; recovery was followed by a DE1 timeout and later connection failures/133. |
 | #874 field report | `662f0cfc` (build 2774) | historical dependency resolved by that build | Same reported Android 10 ROM class as #868 | Original full-height scale, FW 1.1; old `displayOff` fallback still intentionally disconnected the BLE link | The scale was identified correctly and streamed for roughly 30 minutes. The observed drop at sleep was application-requested by the old power policy, not evidence of a native transport timeout. |
-| Current protocol/power baseline for A/B | Decaid `main` `0de2d025ae4e0c63fbae3333300985cc8db4ab21`, which includes the accepted #867 behavior | `16bbfbce197eb5913c6b16578363f7dc943e605d` (`universal_ble` 2.2.6 fork pin, confirmed in `pubspec.lock`) | Original-scale affected device still requires re-validation; HDS 3.1.14-custom has a successful hardware pass recorded in #867 | `ScalePowerMode.displayOff` sends shared `0A 00` and preserves a healthy original/unknown/pre-modern-HDS BLE connection. Explicit disconnect mode is separate. | This is the application baseline that must be identical in A and B. Do not compare the native candidate against the older disconnect-on-display-off policy. |
+| Current protocol/power baseline for A/B | Decaid `4d522443aaa4dc6470dcf56e9df61c4426fbeaf6`, the merged #867 result; the earlier `0de2d025ae4e0c63fbae3333300985cc8db4ab21` base does not contain the corrected scale-power behavior | `16bbfbce197eb5913c6b16578363f7dc943e605d` (`universal_ble` 2.2.6 fork pin, confirmed in `pubspec.lock`) | Original-scale affected device still requires re-validation; HDS 3.1.14-custom has a successful hardware pass recorded in #867 | `ScalePowerMode.displayOff` sends shared `0A 00` and preserves a healthy original/unknown/pre-modern-HDS BLE connection. Explicit disconnect mode is separate. | This is the application baseline that must be identical in A and B. Do not compare the native candidate against the older disconnect-on-display-off policy. |
 | Native admission candidate | [`tadelv/universal_ble` PR #25](https://github.com/tadelv/universal_ble/pull/25) head `a5cc8dd727a2f7da6822eccdc968038839fe0bb9` | candidate relative to fork base `16bbfbce197eb5913c6b16578363f7dc943e605d` | Android implementation candidate; exact-head checks are green, including native Android unit tests; affected hardware is not validated | Must be paired with the same current application/power behavior as baseline A | Candidate serializes unresolved direct native connection establishment and rejects connected callbacks with non-success GATT status. Deterministic fixtures establish ownership invariants, not the field cause. |
 | Native lifecycle candidate | [`tadelv/universal_ble` PR #28](https://github.com/tadelv/universal_ble/pull/28) head `895aa687a25c99b17c81e8672cac7de051551ded` | includes PR #25 head `a5cc8dd727a2f7da6822eccdc968038839fe0bb9` | Native Android unit tests passed in [CI run `35108117215`](https://github.com/tadelv/universal_ble/actions/runs/35108117215) on tested merge `e3ddd73beab1bfb1447abb65fad44438239936e6`; affected hardware is not validated | Same application/power behavior as baseline A | Candidate retains exact GATT ownership through confirmed close, fences delayed allocation during teardown, rejects late success for the exact GATT being torn down, and keeps one bounded automatic close-retry schedule per owner. Host Flutter tests cover Dart behavior but do not validate Kotlin. |
 
@@ -128,10 +128,18 @@ must not make field diagnostics hang or trigger BLE work.
 The following evidence is intentionally **not fabricated in Decaid** and remains
 owned by the fork/native work package (#27): native request/admission/callback/
 close timestamps, native numeric status, native client identity/owned-client
-count and teardown confirmation. Per-device queue-generation/active-operation
-metadata must be exported at the BLE boundary if it is needed for the final
-field bundle; a webserver handler must not reach around that boundary to import
-third-party BLE implementation details.
+count and teardown confirmation. The final-review diagnostic completion exports
+per-device queue generations, active/pending counts and up to 32 operation
+labels through the BLE transport boundary. Timeout/clear snapshots are captured
+before pending work is removed and retained with same-boundary peer state
+(latest failure only, up to 32 peers; history stays in the app log). Raw
+notification age and successfully parsed machine/weight sample age are separate;
+neither endpoint reads nor replayed
+machine samples refresh them. No payloads or additional BLE work are collected.
+
+These additions require the updated native-fork API and therefore an updated
+candidate pin, unlike the initial diagnostics draft. The immutable matrix above
+records the earlier evidence, not the final source heads; part 5 records those.
 
 For field correlation, capture the exported diagnostic report and native
 `UniversalBle` logcat together. A Dart-only support bundle must not be described
@@ -141,8 +149,8 @@ as proof of native GATT disposal.
 
 ### Baseline A
 
-- Decaid application behavior: `0de2d025ae4e0c63fbae3333300985cc8db4ab21`
-  (or a later revision with identical scale-power semantics).
+- Decaid application behavior: `4d522443aaa4dc6470dcf56e9df61c4426fbeaf6`
+  (the merged #867 result, or a later revision with identical scale-power semantics).
 - `universal_ble`: `16bbfbce197eb5913c6b16578363f7dc943e605d`.
 - Original scale: affected full-height scale, FW 1.1.
 - `displayOff`: shared `0A 00`, no intentional BLE disconnect.
@@ -152,6 +160,13 @@ as proof of native GATT disposal.
 Identical to A except for the reviewed immutable `tadelv/universal_ble` commit
 produced by work packages #26/#27. Do not combine the comparison with another
 scale protocol, retry, timeout or power-policy change.
+
+Before running the deferred hardware comparison, prepare an API-compatible
+baseline: the final application uses new fork diagnostic/cancellation methods,
+so substituting the unmodified `16bbfbce` pin is no longer a buildable A/B
+procedure. Any compatibility-only baseline changes must be reviewed and pinned,
+without importing candidate admission/recovery behavior. Keep application and
+scale-power behavior identical and retain the numerical criteria below.
 
 ### Measurements
 

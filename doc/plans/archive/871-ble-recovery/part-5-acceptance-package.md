@@ -477,6 +477,9 @@ GATT clients remain outside the direct-admission guarantee.
 
 ## Sign-off state
 
+- Work-session handoff: implementation review and available supplemental tests
+  are complete for this session. No further peripheral tests or worker runs
+  are scheduled. PRs remain draft; no merge or issue closure is implied.
 - Prerequisite software reviews: final A through D heads are reviewed and their
   recorded CI runs are green.
 - Final A+D combination: isolated merge passed focused diagnostics, focused
@@ -500,3 +503,29 @@ GATT clients remain outside the direct-admission guarantee.
 - Affected-device matrix: `NOT RUN`.
 - Maintainer hardware sign-off: pending.
 - #871, #875, and #877: remain open.
+
+### Peripheral cup-response follow-up
+
+After the user confirmed placement and removal on Bengle's built-in scale,
+the separate hardware app recorded 3,032 scale snapshots. The reading rose
+from about -376 g to -106.4 g, then fell after removal, reaching -321.8125 g
+before disconnect. The baseline did not recover during the observation.
+This demonstrates live response to physical manipulation, not weighing
+accuracy, calibration, or #871 dual-peer recovery. No tare or calibration
+command was sent. The user confirmations and these measurements supersede
+only the earlier unconfirmed cup-test status.
+
+Capture: `bengle-cup-response-confirmed.ndjson`, SHA-256
+`FF77553A98D5BDCEED1EB2E44076C3AF226C8F22AF035A0992842A189CEE6FE6`.
+Final disconnect returned HTTP 200 at host UTC 06:27:37.155. No machine or
+scale snapshots arrived during the remaining 36 seconds of recording. The
+test app was force-stopped and its ADB forward removed; the final service
+inspection found no active candidate service. The original Decaid was not
+started, stopped, replaced, or cleared.
+
+The direct-connect virtual-scale finding and this load-response observation
+remain separate from #871's native BLE hypothesis. Do not expand the BLE
+recovery PRs with calibration changes or unrelated Bengle behavior. The
+remaining #871 gate is the fixed A/B matrix on affected Android hardware with
+two independent BLE peers, including healthy-peer isolation, link-loss
+recovery, unavailable-peer fairness, cancellation and adapter transitions.

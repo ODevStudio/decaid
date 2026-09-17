@@ -4,6 +4,9 @@
 - Freeze the baseline/candidate matrix, numerical pass criteria, support log
   capture, operational limits, and rollback procedure.
 - Keep every affected Android hardware result explicitly `NOT RUN`.
+- Finalize this session's handoff without merging, closing #871, or claiming
+  affected-device sign-off. Further hardware work requires the missing matrix
+  setup; no additional worker or periodic follow-up is scheduled.
 
 ## Linked Issue
 
@@ -47,6 +50,13 @@ has not run.
   erase this failure. A PresenceController timeout, skin-stub 404, negative
   drifting weight values, and the inconclusive short memory sample are
   retained in the acceptance package.
+- A later user-confirmed cup placement/removal on Bengle's built-in scale
+  produced 3,032 scale snapshots and a clear rise/fall, but the reading did
+  not return to its prior baseline. This is physical-response evidence only,
+  not accuracy or #871 acceptance. No tare or calibration was performed.
+  The capture hash is
+  `FF77553A98D5BDCEED1EB2E44076C3AF226C8F22AF035A0992842A189CEE6FE6`.
+  Final disconnect stopped telemetry; the test app and forward were cleaned up.
 
 - Block A docs-only final head `b53d4ba650f1dc15d073b7d728f679ae3db3d142`:
   CI run `35115385053` passed format, analysis, the Linux build smoke, and the

@@ -1,5 +1,19 @@
 # AI Debug Notes
 
+## Windows HDS USB Read Latency
+
+A CH340K HDS running firmware 3.1.14 delivered 255-byte blocks every roughly
+1.8-3 seconds through the pinned libserialport reader's default 500 ms timeout.
+This can miss the 1800 ms passive discovery window after the scale has entered
+binary-stream mode. A passive .NET reader received valid frames immediately;
+the same libserialport reader with a 50 ms timeout delivered seven-byte frames
+within about 90 ms. Desktop Windows now sets that timeout explicitly. Keep
+binary discovery independent of read boundaries; it may start mid-frame.
+
+The pinned libserialport fork retains ownership of configurations passed to
+`setConfig`. Diagnostic code must not also dispose that configuration: the port
+disposes it, and a second free triggers the Windows debug heap assertion.
+
 Read this when debugging BLE errors, diagnosing platform-specific crashes, investigating app hangs, or tracing error paths. Skip it for feature work that doesn't touch error handling.
 
 ## Source Of Truth

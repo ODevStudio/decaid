@@ -746,7 +746,10 @@ class _DesktopSerialPort implements SerialTransport {
       _log.finest("current config: ${_port.config.baudRate}");
 
       _log.fine("port opened");
-      final reader = SerialPortReader(_port);
+      final reader = SerialPortReader(
+        _port,
+        timeout: Platform.isWindows ? 50 : null,
+      );
       final readerTag = "reader=${identityHashCode(reader).toRadixString(16)}";
       _log.info("subscribing reader (id=$id $instanceTag $readerTag)");
       _portSubscription = reader.stream.listen(

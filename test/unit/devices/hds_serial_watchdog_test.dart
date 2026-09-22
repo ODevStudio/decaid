@@ -247,6 +247,28 @@ void main() {
       });
     });
 
+    test('disconnects cleanly when the watchdog retry write fails', () {
+      fakeAsync((async) {
+        final transport = RetryFailingSerialTransport();
+        final hds = HDSSerial(transport: transport);
+        final states = <ConnectionState>[];
+        hds.connectionState.listen(states.add);
+        hds.onConnect();
+        async.flushMicrotasks();
+        transport.emitRawData(weightFrame(42));
+        async.flushMicrotasks();
+        expect(states.last, ConnectionState.connected);
+
+        async.elapse(const Duration(seconds: 6));
+
+        expect(transport.disconnectCalled, isTrue);
+        expect(states.last, ConnectionState.disconnected);
+        expect(transport.writtenHexCommands, hasLength(2));
+        async.elapse(const Duration(seconds: 30));
+        expect(transport.writtenHexCommands, hasLength(2));
+      });
+    });
+
     test('firmware text does not reset the watchdog', () {
       fakeAsync((async) {
         final transport = MockSerialTransport();
@@ -326,4 +348,14 @@ void main() {
       });
     });
   });
+}
+
+class RetryFailingSerialTransport extends MockSerialTransport {
+  @override
+  Future<void> writeHexCommand(Uint8List command) async {
+    await super.writeHexCommand(command);
+    if (writtenHexCommands.length > 1) {
+      throw StateError('Serial write failed');
+    }
+  }
 }

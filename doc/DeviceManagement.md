@@ -104,6 +104,8 @@ Discovery services are responsible for scanning and creating device instances. E
 - **HDS USB readiness:** `HDSSerial` enables the 10 Hz OpenScale binary stream and remains `connecting` until a checksum-valid weight frame arrives. Its buffered decoder accepts fragmented/coalesced frames mixed with firmware text; only valid weight frames refresh the watchdog.
 - **Desktop discovery refresh:** Background reconciliation publishes replacement device instances even when their stable IDs are unchanged. This replaces cached references to disposed transports after an HDS liveness reprobe; unchanged instances do not generate extra discovery updates.
 - **Windows serial reads:** The reader uses a 50 ms timeout to avoid coarse USB buffering delaying discovery and weight updates. Other desktop platforms retain the library default. Binary HDS discovery recognizes its signature across read boundaries and after unrelated leading bytes; connected weight decoding still validates checksums.
+- **Inconclusive desktop probes:** Ports with no passive data, or a failed probe, remain eligible for background reconciliation. A charging HDS can therefore be discovered after it starts streaming without another unplug or manual scan. The existing active DE1 identification probe is preserved; completed unknown probes with passive data retain their negative cache.
+- **HDS watchdog writes:** A failed enable retry disconnects the scale and releases recovery to ConnectionManager instead of raising an unhandled asynchronous error.
 
   DE1-family detection uses product names and the normal protocol probe:
   1. Exact `productName == "DE1"` creates `UnifiedDe1`; exact

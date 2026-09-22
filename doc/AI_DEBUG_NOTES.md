@@ -146,6 +146,26 @@ An Acaia shot that stops at a weight far above the scale display can be a timer-
 
 An Acaia scale that is linked but publishes no weight must not be reported connected. Identification and configuration writes, settings frames, timer frames, and information frames do not establish readiness. Initialization must observe a valid weight frame or tear down and leave retry ownership with ConnectionManager.
 
+## HDS stays unavailable after USB reinsertion in charging mode
+
+Symptom: desktop serial enumeration sees the HDS adapter, but switching the
+scale from charging to weighing does not restore its weight stream.
+
+Root cause: a silent probe was permanently cached as an unknown device until
+the port disappeared. Splitting an empty string produces a one-element list,
+so the old empty-data guard did not detect the silent probe. A separate
+watchdog enable retry ignored write failures after unplugging.
+
+Fix pattern: do not negatively cache a probe with no passive bytes or a
+transport exception. Keep the active DE1 probe for devices that only respond
+to commands. Catch watchdog retry failures and disconnect normally. Existing
+reconciliation and ConnectionManager backoff own subsequent recovery.
+
+Prevention: test with the embedded skin closed, since a skin can issue its own
+REST scans. Distinguish charging mode and scale reboot from uninterrupted-power
+USB loss. The retry-write regression uses a transport that fails its second
+write; successful initialization and normal watchdog behavior remain covered.
+
 ## Keeping Notes Fresh
 
 Add debugging patterns with: symptom, root cause, fix pattern, prevention. Prune when fixes ship and patterns are no longer current.

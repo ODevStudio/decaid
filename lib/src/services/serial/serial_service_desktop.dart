@@ -38,7 +38,7 @@ class SerialServiceDesktop implements DeviceDiscoveryService {
 
   final Map<String, Device> _portPathToDevice = {};
 
-  Set<String> _lastEmittedIds = {};
+  Map<String, Device> _lastEmittedDevices = {};
 
   final Set<String> _selfDisconnectedPaths = {};
 
@@ -159,7 +159,7 @@ class SerialServiceDesktop implements DeviceDiscoveryService {
           }
         });
         _devices = _portPathToDevice.values.toList();
-        _lastEmittedIds = _devices.map((d) => d.deviceId).toSet();
+        _lastEmittedDevices = {for (final d in _devices) d.deviceId: d};
         _machineSubject.add(_devices);
         _log.info('Quick-connect succeeded for ${remembered.id}');
         return device;
@@ -314,10 +314,11 @@ class SerialServiceDesktop implements DeviceDiscoveryService {
     }
 
     _devices = _portPathToDevice.values.toList();
-    final ids = _devices.map((d) => d.deviceId).toSet();
-    if (_forceEmitOnNextScan || serialDevicesChanged(ids, _lastEmittedIds)) {
+    final instances = {for (final d in _devices) d.deviceId: d};
+    if (_forceEmitOnNextScan ||
+        serialDevicesChanged(instances, _lastEmittedDevices)) {
       _forceEmitOnNextScan = false;
-      _lastEmittedIds = ids;
+      _lastEmittedDevices = instances;
       _machineSubject.add(_devices);
       _log.info("Devices: $_devices");
     }
@@ -332,7 +333,7 @@ class SerialServiceDesktop implements DeviceDiscoveryService {
       await _dropAndDispose(path, reap: false);
 
       _devices = _portPathToDevice.values.toList();
-      _lastEmittedIds = _devices.map((d) => d.deviceId).toSet();
+      _lastEmittedDevices = {for (final d in _devices) d.deviceId: d};
       if (!_machineSubject.isClosed) {
         _machineSubject.add(List.unmodifiable(_devices));
       }

@@ -1029,6 +1029,91 @@ void main() {
   );
 
   test(
+    'upload sends an un-migrated legacy enjoyment value unconverted',
+    () async {
+      final shot = _shot(annotations: {'enjoyment': 80});
+      final manager = await _loadPlugin('''
+      globalThis.fetch = async (url, init = {}) => {
+        if (url.endsWith('/shots/latest')) {
+          return { ok: true, json: async () => ({ id: 'shot-1' }) };
+        }
+        if (url.endsWith('/shots/shot-1') && (!init.method || init.method === 'GET')) {
+          return { ok: true, json: async () => (${jsonEncode(shot)}) };
+        }
+        if (url.endsWith('/shots/upload')) {
+          const start = init.body.indexOf('\\r\\n\\r\\n') + 4;
+          const end = init.body.lastIndexOf('\\r\\n--');
+          globalThis.__upload = JSON.parse(init.body.slice(start, end));
+          return { ok: true, json: async () => ({ id: 'visualizer-1' }) };
+        }
+        if (url.endsWith('/shots/shot-1') && init.method === 'PUT') {
+          return { ok: true, json: async () => ({}) };
+        }
+        if (url.endsWith('/shots/visualizer-1?essentials=1')) {
+          return { ok: true, json: async () => ({ id: 'visualizer-1', tags: [] }) };
+        }
+        if (url.endsWith('/shots/visualizer-1') && init.method === 'PATCH') {
+          return { ok: true, json: async () => ({ id: 'visualizer-1', updated_at: 1 }) };
+        }
+        throw new Error('Unexpected URL: ' + url);
+      };
+    ''');
+
+      _startAutoUpload(manager);
+      final upload =
+          await _waitForJs(manager, 'globalThis.__upload')
+              as Map<String, dynamic>;
+
+      expect(
+        ((upload['app'] as Map)['data']
+            as Map)['settings']['espresso_enjoyment'],
+        '80',
+      );
+    },
+  );
+
+  test(
+    'forward sync sends an un-migrated legacy enjoyment value unconverted',
+    () async {
+      final manager = await _loadPlugin('''
+      globalThis.__patches = [];
+      globalThis.fetch = async (url, init = {}) => {
+        if (url.endsWith('/shots/visualizer-9?essentials=1')) {
+          return { ok: true, json: async () => ({ id: 'visualizer-9', tags: [] }) };
+        }
+        if (url.endsWith('/shots/visualizer-9') && init.method === 'PATCH') {
+          const patch = JSON.parse(init.body);
+          globalThis.__patches = [...globalThis.__patches, patch];
+          return { ok: true, json: async () => ({ id: 'visualizer-9', updated_at: globalThis.__patches.length }) };
+        }
+        throw new Error('Unexpected URL: ' + url);
+      };
+    ''');
+
+      _dispatchShotUpdate(
+        manager,
+        _shot(
+          annotations: {
+            'enjoyment': 80,
+            'extras': {'visualizerId': 'visualizer-9'},
+          },
+        ),
+        {
+          'annotations': {'enjoyment': 80},
+        },
+      );
+      final patch =
+          await _waitForJs(
+                manager,
+                'globalThis.__patches.length === 1 ? globalThis.__patches[0] : null',
+              )
+              as Map<String, dynamic>;
+
+      expect((patch['shot'] as Map<String, dynamic>)['espresso_enjoyment'], 80);
+    },
+  );
+
+  test(
     'back sync scales Visualizer espresso_enjoyment to the annotations.enjoyment range',
     () async {
       final manager = await _loadPlugin(

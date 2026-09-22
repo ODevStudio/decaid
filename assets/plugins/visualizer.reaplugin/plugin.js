@@ -206,6 +206,18 @@ function createPlugin(host) {
     return normalizeTags([...recipeTags, ...shotTags]);
   }
 
+  // annotations.enjoyment is canonically 0-5, but shots imported or back-synced
+  // before this scale conversion existed can still hold the raw 0-100 value.
+  // A value above the canonical max is treated as one of those un-migrated
+  // legacy values and sent through unconverted, rather than re-scaled onto
+  // Visualizer's 0-100 range a second time.
+  function toVisualizerEnjoyment(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return null;
+    if (number > 5) return Math.round(number);
+    return Math.round(number * VISUALIZER_ENJOYMENT_SCALE);
+  }
+
   function convertReaToVisualizerFormat(reaShot) {
     if (!reaShot || !reaShot.measurements || reaShot.measurements.length === 0) {
       throw new Error("Invalid or empty Decent shot data for conversion.");
@@ -242,7 +254,7 @@ function createPlugin(host) {
             bean_type: context.coffeeName ?? reaShot.workflow.coffeeData?.name,
             drink_tds: annotations.drinkTds != null ? String(annotations.drinkTds) : undefined,
             drink_ey: annotations.drinkEy != null ? String(annotations.drinkEy) : undefined,
-            espresso_enjoyment: annotations.enjoyment != null ? String(Math.round(Number(annotations.enjoyment) * VISUALIZER_ENJOYMENT_SCALE)) : undefined,
+            espresso_enjoyment: annotations.enjoyment != null ? String(toVisualizerEnjoyment(annotations.enjoyment)) : undefined,
             espresso_notes: annotations.espressoNotes,
           }
         }
@@ -726,7 +738,7 @@ function createPlugin(host) {
       if (typeof value === "string" && value.trim() !== "") payload[key] = value;
     };
 
-    setNumber("espresso_enjoyment", annotations.enjoyment, patchAnnotations, "enjoyment", (n) => Math.round(n * VISUALIZER_ENJOYMENT_SCALE));
+    setNumber("espresso_enjoyment", annotations.enjoyment, patchAnnotations, "enjoyment", toVisualizerEnjoyment);
     setNumber("drink_tds", annotations.drinkTds, patchAnnotations, "drinkTds");
     setNumber("drink_ey", annotations.drinkEy, patchAnnotations, "drinkEy");
     setNumber("bean_weight", annotations.actualDoseWeight ?? context.targetDoseWeight, patchAnnotations, "actualDoseWeight");
@@ -1177,7 +1189,7 @@ function createPlugin(host) {
   // Return the plugin object
   return {
     id: "visualizer.reaplugin",
-    version: "1.5.7",
+    version: "1.5.8",
 
     onLoad(settings) {
       state.username = settings.Username;

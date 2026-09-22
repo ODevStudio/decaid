@@ -602,6 +602,11 @@ The **proxy** lets clients *use* the account without ever seeing the credentials
 | GET | `/api/v1/webview/logs` | WebView console log forwarding, newest first (`?order=asc` for original chronological order) | `webview_logs_handler.dart` |
 | POST | `/api/v1/derek/answers/stream` | Relay to the Derek RAG assistant: forwards the JSON body verbatim to `derek.decentespresso.com/api/answers/stream` and pipes the SSE response back unbuffered. No auth (public data). Exists so browser skins avoid Derek's failing CORS preflight. | `derek_handler.dart` |
 
+Manual app-update failures include the GitHub HTTP status and a bounded,
+single-line error explanation. Exhausted rate limits include a UTC reset time
+when GitHub provides a valid one. Automatic checks remain quiet; clients must
+not parse these human-readable messages as a stable error code.
+
 ### Debug (debug builds only)
 
 Only registered when the app is launched with a non-empty `simulate` Dart define. Use `--dart-define=simulate=0` to enable the routes without selecting simulated devices. Returns 404 on production builds.

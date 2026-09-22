@@ -19,7 +19,7 @@ class GitHubRelease {
       assets.where((a) => a.name.toLowerCase().endsWith('.zip')).toList();
 }
 
-const _headers = {
+const gitHubApiHeaders = {
   'Accept': 'application/vnd.github.v3+json',
   'User-Agent': 'Decaid',
 };
@@ -40,7 +40,7 @@ Future<GitHubRelease> fetchLatestGitHubRelease(
       ? 'https://api.github.com/repos/$repo/releases'
       : 'https://api.github.com/repos/$repo/releases/latest';
 
-  final response = await http.get(Uri.parse(url), headers: _headers);
+  final response = await http.get(Uri.parse(url), headers: gitHubApiHeaders);
   if (response.statusCode != 200) {
     throw Exception(
       'Failed to fetch GitHub release for $repo: ${response.statusCode}',
@@ -64,7 +64,7 @@ Future<GitHubRelease> fetchGitHubReleaseByTag(String repo, String tag) async {
   validateGitHubRepo(repo);
   final response = await http.get(
     Uri.parse('https://api.github.com/repos/$repo/releases/tags/$tag'),
-    headers: _headers,
+    headers: gitHubApiHeaders,
   );
   if (response.statusCode != 200) {
     throw Exception(
@@ -92,7 +92,7 @@ Future<String> fetchGitHubBranchCommit(String repo, String branch) async {
   validateGitHubRepo(repo);
   final response = await http.get(
     Uri.parse('https://api.github.com/repos/$repo/commits/$branch'),
-    headers: _headers,
+    headers: gitHubApiHeaders,
   );
   if (response.statusCode != 200) {
     throw Exception('Failed to resolve $repo@$branch: ${response.statusCode}');

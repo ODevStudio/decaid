@@ -220,6 +220,9 @@ channels:
       externally managed build) come back as a direct `{"error": ...}` reply;
       operational outcomes (download/install progress and failures) flow
       through the `AppUpdateState` stream.
+      Manual GitHub check failures include the HTTP status and a bounded
+      explanation, with a UTC reset time for exhausted rate limits when
+      available. Error text is human-readable, not a stable machine code.
     messages:
       updateState:
         $ref: '#/components/messages/UpdateState'

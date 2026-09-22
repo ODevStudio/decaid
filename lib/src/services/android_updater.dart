@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pub_semver/pub_semver.dart';
 import 'package:reaprime/src/services/apk_installer.dart';
+import 'package:reaprime/src/util/github_archive.dart';
 
 class UpdateInfo {
   final String version;
@@ -47,6 +48,37 @@ class UpdateCheckException implements Exception {
 
   UpdateCheckException(this.message);
 
+  factory UpdateCheckException.fromResponse(http.Response response) {
+    final status = 'Failed to fetch releases: HTTP ${response.statusCode}';
+    var detail = response.body.trim();
+    try {
+      final decoded = jsonDecode(detail);
+      detail = decoded is Map && decoded['message'] is String
+          ? decoded['message'] as String
+          : '';
+    } on FormatException {
+      if (detail.startsWith('<') || detail.startsWith('{')) detail = '';
+    }
+    detail = detail.replaceAll(RegExp(r'[\x00-\x20\x7f]+'), ' ').trim();
+    if (detail.length > 300) detail = '${detail.substring(0, 300)}...';
+    final rateLimited =
+        response.statusCode == 429 ||
+        (response.statusCode == 403 &&
+            (response.headers['x-ratelimit-remaining'] == '0' ||
+                detail.toLowerCase().contains('rate limit')));
+    if (rateLimited) {
+      final seconds = int.tryParse(response.headers['x-ratelimit-reset'] ?? '');
+      final reset = seconds != null && seconds > 0 && seconds <= 253402300799
+          ? DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true)
+          : null;
+      return UpdateCheckException(
+        '$status: GitHub API rate limit exceeded.'
+        '${reset == null ? '' : ' Retry after ${reset.toIso8601String()}.'}',
+      );
+    }
+    return UpdateCheckException('$status${detail.isEmpty ? '' : ': $detail'}');
+  }
+
   @override
   String toString() => message;
 }
@@ -82,12 +114,13 @@ class AndroidUpdater {
         'Checking for updates on $channel channel (current: $currentVersion)',
       );
 
-      final response = await _httpClient.get(Uri.parse(_releasesUrl));
+      final response = await _httpClient.get(
+        Uri.parse(_releasesUrl),
+        headers: gitHubApiHeaders,
+      );
 
       if (response.statusCode != 200) {
-        throw UpdateCheckException(
-          'Failed to fetch releases: HTTP ${response.statusCode}',
-        );
+        throw UpdateCheckException.fromResponse(response);
       }
 
       final releases = json.decode(response.body) as List<dynamic>;

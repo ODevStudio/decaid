@@ -4978,6 +4978,10 @@ paths:
         NOT trigger a network check (force a re-check via the
         `/ws/v1/update` WebSocket `{"command":"check"}`).
 
+        Manual GitHub check failures retain the HTTP status and a bounded
+        explanation, including a UTC rate-limit reset time when available.
+        Error text is human-readable, not a stable machine code.
+
         `installable` is true only on Android AND when an update is available;
         on other platforms hand the user off to `releaseUrl`.
       tags: [System]

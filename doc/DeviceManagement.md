@@ -239,6 +239,15 @@ owners perform native teardown. Disconnect listeners mutate the cache only when
 the emitting device instance still owns that entry, so delayed events from an
 older generation cannot remove its replacement.
 
+### Scale recovery transport
+
+Preferred-scale recovery uses discovered transport metadata, falling back to
+the remembered device when the scale is no longer in the discovery cache.
+USB serial and Wi-Fi scales use the normal scale-only rescan with reconnect
+backoff, even when the scanner supports BLE background watch. BLE scales retain
+the background watch; missing or unknown transport metadata preserves the
+existing watch fallback. Power-mode and ambiguity guards still apply.
+
 ### Android USB attach recovery
 
 `DeviceAttachNotifier` is an optional discovery-service capability.

@@ -1,5 +1,19 @@
 # AI Debug Notes
 
+## Windows HDS USB Read Latency
+
+A CH340K HDS running firmware 3.1.14 delivered 255-byte blocks every roughly
+1.8-3 seconds through the pinned libserialport reader's default 500 ms timeout.
+This can miss the 1800 ms passive discovery window after the scale has entered
+binary-stream mode. A passive .NET reader received valid frames immediately;
+the same libserialport reader with a 50 ms timeout delivered seven-byte frames
+within about 90 ms. Desktop Windows now sets that timeout explicitly. Keep
+binary discovery independent of read boundaries; it may start mid-frame.
+
+The pinned libserialport fork retains ownership of configurations passed to
+`setConfig`. Diagnostic code must not also dispose that configuration: the port
+disposes it, and a second free triggers the Windows debug heap assertion.
+
 Read this when debugging BLE errors, diagnosing platform-specific crashes, investigating app hangs, or tracing error paths. Skip it for feature work that doesn't touch error handling.
 
 ## Source Of Truth
@@ -131,6 +145,26 @@ termination callback.
 An Acaia shot that stops at a weight far above the scale display can be a timer-bodied event-11 frame or a short frame reading bytes from an adjacent frame as weight. Confirm the scale implementation and protocol in the logs, then inspect frame length, event type, and event-11 selector. Selector `7` is timer and must never publish weight; selector `5` requires its complete six-byte weight body inside the same frame.
 
 An Acaia scale that is linked but publishes no weight must not be reported connected. Identification and configuration writes, settings frames, timer frames, and information frames do not establish readiness. Initialization must observe a valid weight frame or tear down and leave retry ownership with ConnectionManager.
+
+## HDS stays unavailable after USB reinsertion in charging mode
+
+Symptom: desktop serial enumeration sees the HDS adapter, but switching the
+scale from charging to weighing does not restore its weight stream.
+
+Root cause: a silent probe was permanently cached as an unknown device until
+the port disappeared. Splitting an empty string produces a one-element list,
+so the old empty-data guard did not detect the silent probe. A separate
+watchdog enable retry ignored write failures after unplugging.
+
+Fix pattern: do not negatively cache a probe with no passive bytes or a
+transport exception. Keep the active DE1 probe for devices that only respond
+to commands. Catch watchdog retry failures and disconnect normally. Existing
+reconciliation and ConnectionManager backoff own subsequent recovery.
+
+Prevention: test with the embedded skin closed, since a skin can issue its own
+REST scans. Distinguish charging mode and scale reboot from uninterrupted-power
+USB loss. The retry-write regression uses a transport that fails its second
+write; successful initialization and normal watchdog behavior remain covered.
 
 ## Keeping Notes Fresh
 

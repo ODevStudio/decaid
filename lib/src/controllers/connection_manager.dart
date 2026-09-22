@@ -247,7 +247,20 @@ class ConnectionManager {
   Duration deferredScaleScanDelay = const Duration(seconds: 3);
 
   bool get supportsBackgroundScaleWatch =>
-      deviceScanner.supportsBackgroundWatch;
+      deviceScanner.supportsBackgroundWatch &&
+      _preferredScaleTransport != TransportType.serial &&
+      _preferredScaleTransport != TransportType.wifi;
+
+  TransportType? get _preferredScaleTransport {
+    final id = settingsController.preferredScaleId;
+    return deviceScanner.devices
+            .whereType<Scale>()
+            .firstWhereOrNull((scale) => scale.deviceId == id)
+            ?.transportType ??
+        rememberedDevices?.remembered
+            .firstWhereOrNull((device) => device.id == id)
+            ?.transportType;
+  }
 
   bool get shouldRetryPreferredScale => _shouldRetryPreferredScale();
   bool get scaleReconnectBlockedByPowerMode =>
@@ -293,6 +306,7 @@ class ConnectionManager {
       scanner: deviceScanner,
       shouldWatch: () =>
           !_isConnecting &&
+          supportsBackgroundScaleWatch &&
           _shouldRetryPreferredScale() &&
           _disconnectSupervisor.latestMachine is! BengleInterface,
       preferredScaleId: () => settingsController.preferredScaleId,
@@ -1380,9 +1394,10 @@ class ConnectionManager {
 
   void _ensureScaleReacquisition() {
     if (_shuttingDown) return;
-    if (deviceScanner.supportsBackgroundWatch) {
+    if (supportsBackgroundScaleWatch) {
       unawaited(_scaleWatch.arm());
     } else {
+      unawaited(_scaleWatch.disarm());
       _maybeSchedulePreferredScaleReconnect();
     }
   }

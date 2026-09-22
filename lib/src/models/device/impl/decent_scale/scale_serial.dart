@@ -181,7 +181,7 @@ class HDSSerial implements Scale, TransportHandoffScale {
     _retryAttempted = false;
     _watchdogTotalTicks = 0;
     _watchdogTimer?.cancel();
-    _watchdogTimer = Timer.periodic(_watchdogInterval, (_) {
+    _watchdogTimer = Timer.periodic(_watchdogInterval, (_) async {
       _ticksSinceLastData++;
       _watchdogTotalTicks++;
 
@@ -205,7 +205,12 @@ class HDSSerial implements Scale, TransportHandoffScale {
           "No data for ${_warningTicks * _watchdogInterval.inSeconds}s "
           "(validWeightFrames=$_validWeightFrames), resending enable command",
         );
-        _transport.writeHexCommand(Uint8List.fromList(_enableCommand));
+        try {
+          await _transport.writeHexCommand(Uint8List.fromList(_enableCommand));
+        } catch (e, st) {
+          _log.warning('Watchdog retry failed, disconnecting', e, st);
+          await disconnect();
+        }
       }
     });
   }

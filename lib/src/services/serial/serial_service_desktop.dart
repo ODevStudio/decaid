@@ -38,7 +38,7 @@ class SerialServiceDesktop implements DeviceDiscoveryService {
 
   final Map<String, Device> _portPathToDevice = {};
 
-  Set<String> _lastEmittedIds = {};
+  Map<String, Device> _lastEmittedDevices = {};
 
   final Set<String> _selfDisconnectedPaths = {};
 
@@ -159,7 +159,7 @@ class SerialServiceDesktop implements DeviceDiscoveryService {
           }
         });
         _devices = _portPathToDevice.values.toList();
-        _lastEmittedIds = _devices.map((d) => d.deviceId).toSet();
+        _lastEmittedDevices = {for (final d in _devices) d.deviceId: d};
         _machineSubject.add(_devices);
         _log.info('Quick-connect succeeded for ${remembered.id}');
         return device;
@@ -314,10 +314,11 @@ class SerialServiceDesktop implements DeviceDiscoveryService {
     }
 
     _devices = _portPathToDevice.values.toList();
-    final ids = _devices.map((d) => d.deviceId).toSet();
-    if (_forceEmitOnNextScan || serialDevicesChanged(ids, _lastEmittedIds)) {
+    final instances = {for (final d in _devices) d.deviceId: d};
+    if (_forceEmitOnNextScan ||
+        serialDevicesChanged(instances, _lastEmittedDevices)) {
       _forceEmitOnNextScan = false;
-      _lastEmittedIds = ids;
+      _lastEmittedDevices = instances;
       _machineSubject.add(_devices);
       _log.info("Devices: $_devices");
     }
@@ -332,7 +333,7 @@ class SerialServiceDesktop implements DeviceDiscoveryService {
       await _dropAndDispose(path, reap: false);
 
       _devices = _portPathToDevice.values.toList();
-      _lastEmittedIds = _devices.map((d) => d.deviceId).toSet();
+      _lastEmittedDevices = {for (final d in _devices) d.deviceId: d};
       if (!_machineSubject.isClosed) {
         _machineSubject.add(List.unmodifiable(_devices));
       }
@@ -512,9 +513,6 @@ class SerialServiceDesktop implements DeviceDiscoveryService {
         "Collected serial data: ${combined.map((e) => e.toRadixString(16).padLeft(2, '0'))}",
       );
       _log.info("parsed into strings: $strings");
-      if (combined.isEmpty && strings.isEmpty) {
-        throw ('no data collected');
-      }
       if (strings.any((s) => s.startsWith('R '))) {
         final device = DebugPort(transport: transport);
         _portPathToDeviceId[candidate.path] = device.deviceId;
@@ -587,14 +585,17 @@ class SerialServiceDesktop implements DeviceDiscoveryService {
         }
       }
 
-      _log.warning("Unknown device on port $id");
-      _nonDecentPorts.add(candidate.path);
+      if (combined.isNotEmpty) {
+        _log.warning("Unknown device on port $id");
+        _nonDecentPorts.add(candidate.path);
+      } else {
+        _log.fine('No passive data on port $id; leaving it eligible for retry');
+      }
       _portPathToTransport.remove(candidate.path);
       await transport.dispose();
       return null;
     } catch (e, st) {
-      _log.warning("Port $id is probably not a device we want", e, st);
-      _nonDecentPorts.add(candidate.path);
+      _log.warning('Probe failed on port $id; will retry', e, st);
       _portPathToTransport.remove(candidate.path);
       await transport.dispose();
       return null;
@@ -745,7 +746,10 @@ class _DesktopSerialPort implements SerialTransport {
       _log.finest("current config: ${_port.config.baudRate}");
 
       _log.fine("port opened");
-      final reader = SerialPortReader(_port);
+      final reader = SerialPortReader(
+        _port,
+        timeout: Platform.isWindows ? 50 : null,
+      );
       final readerTag = "reader=${identityHashCode(reader).toRadixString(16)}";
       _log.info("subscribing reader (id=$id $instanceTag $readerTag)");
       _portSubscription = reader.stream.listen(

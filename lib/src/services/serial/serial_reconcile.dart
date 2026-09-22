@@ -220,9 +220,14 @@ Set<String> hdsResuppressionPaths({
     if (presentPorts.contains(p) && !trackedPaths.contains(p)) p,
 };
 
-bool serialDevicesChanged(Set<String> currentIds, Set<String> lastEmittedIds) =>
-    currentIds.length != lastEmittedIds.length ||
-    !currentIds.containsAll(lastEmittedIds);
+bool serialDevicesChanged<T extends Object>(
+  Map<String, T> current,
+  Map<String, T> previous,
+) =>
+    current.length != previous.length ||
+    current.entries.any(
+      (entry) => !identical(previous[entry.key], entry.value),
+    );
 
 bool serialPortMatchesCandidate({
   required String name,

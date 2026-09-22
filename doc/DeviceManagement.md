@@ -102,6 +102,10 @@ Discovery services are responsible for scanning and creating device instances. E
 - **Discovery:** Enumerates serial ports, probes for device identification
 - **Desktop serial identity:** One canonical id is resolved once per enumerated port: `usb-{vid}-{pid}-{serial}` (plus `-ifNN` for interfaces above 0) when USB descriptors are available, otherwise `serial-<basename>`. Candidates are deduplicated before probing, so a macOS adapter exposed as both `/dev/cu.X` and `/dev/tty.X` appears once and `/dev/cu.X` is the endpoint probed. The resolved id is injected into the transport and is the value used for scan dedup, `Device.deviceId`, remembered devices and API inventory. `serial-<basename>` stays accepted as a legacy quick-connect alias; after a successful alias connect the remembered record and `preferredMachineId` migrate to the canonical id. Android keeps its existing `UsbDevice.deviceId`-suffixed identities.
 - **HDS USB readiness:** `HDSSerial` enables the 10 Hz OpenScale binary stream and remains `connecting` until a checksum-valid weight frame arrives. Its buffered decoder accepts fragmented/coalesced frames mixed with firmware text; only valid weight frames refresh the watchdog.
+- **Desktop discovery refresh:** Background reconciliation publishes replacement device instances even when their stable IDs are unchanged. This replaces cached references to disposed transports after an HDS liveness reprobe; unchanged instances do not generate extra discovery updates.
+- **Windows serial reads:** The reader uses a 50 ms timeout to avoid coarse USB buffering delaying discovery and weight updates. Other desktop platforms retain the library default. Binary HDS discovery recognizes its signature across read boundaries and after unrelated leading bytes; connected weight decoding still validates checksums.
+- **Inconclusive desktop probes:** Ports with no passive data, or a failed probe, remain eligible for background reconciliation. A charging HDS can therefore be discovered after it starts streaming without another unplug or manual scan. The existing active DE1 identification probe is preserved; completed unknown probes with passive data retain their negative cache.
+- **HDS watchdog writes:** A failed enable retry disconnects the scale and releases recovery to ConnectionManager instead of raising an unhandled asynchronous error.
 
   DE1-family detection uses product names and the normal protocol probe:
   1. Exact `productName == "DE1"` creates `UnifiedDe1`; exact
@@ -238,6 +242,15 @@ Cache replacement never calls `disconnect(deviceId)`; connection lifecycle
 owners perform native teardown. Disconnect listeners mutate the cache only when
 the emitting device instance still owns that entry, so delayed events from an
 older generation cannot remove its replacement.
+
+### Scale recovery transport
+
+Preferred-scale recovery uses discovered transport metadata, falling back to
+the remembered device when the scale is no longer in the discovery cache.
+USB serial and Wi-Fi scales use the normal scale-only rescan with reconnect
+backoff, even when the scanner supports BLE background watch. BLE scales retain
+the background watch; missing or unknown transport metadata preserves the
+existing watch fallback. Power-mode and ambiguity guards still apply.
 
 ### Android USB attach recovery
 

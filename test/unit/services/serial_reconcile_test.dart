@@ -201,12 +201,23 @@ void main() {
   });
 
   group('serialDevicesChanged', () {
-    test('false for an identical set', () {
-      expect(serialDevicesChanged({'a', 'b'}, {'b', 'a'}), isFalse);
+    final a = Object();
+    final b = Object();
+    test('false for identical instances regardless of ordering', () {
+      expect(serialDevicesChanged({'a': a, 'b': b}, {'b': b, 'a': a}), isFalse);
     });
     test('true when a device is added or removed', () {
-      expect(serialDevicesChanged({'a', 'b'}, {'a'}), isTrue);
-      expect(serialDevicesChanged({'a'}, {'a', 'b'}), isTrue);
+      expect(serialDevicesChanged({'a': a, 'b': b}, {'a': a}), isTrue);
+      expect(serialDevicesChanged({'a': a}, {'a': a, 'b': b}), isTrue);
+    });
+    test('true when liveness replaces a device with the same stable ID', () {
+      expect(
+        serialDevicesChanged({'hds': Object()}, {'hds': Object()}),
+        isTrue,
+      );
+    });
+    test('true when a device ID changes without changing the count', () {
+      expect(serialDevicesChanged({'a': a}, {'b': b}), isTrue);
     });
   });
 

@@ -7,15 +7,17 @@ final _log = Logger('SerialUtils');
 final _hdsRegex = RegExp(r'\d+ Weight: .*');
 bool isDecentScale(List<String> messages, List<Uint8List> captures) {
   _log.finer("is HDS: checking ${messages.length}, $messages");
-  return captures.any(
-        (Uint8List bytes) =>
-            bytes.length > 5 &&
-            bytes[0] == 0x03 &&
-            bytes[1] == 0xCE &&
-            bytes[4] == 0 &&
-            bytes[5] == 0,
-      ) ||
-      messages.any((t) => _hdsRegex.hasMatch(t));
+  if (messages.any((t) => _hdsRegex.hasMatch(t))) return true;
+  final bytes = captures.expand((capture) => capture).toList();
+  for (var offset = 0; offset + 5 < bytes.length; offset++) {
+    if (bytes[offset] == 0x03 &&
+        bytes[offset + 1] == 0xCE &&
+        bytes[offset + 4] == 0 &&
+        bytes[offset + 5] == 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 final _sbRegex = RegExp(

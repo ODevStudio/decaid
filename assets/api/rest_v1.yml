@@ -95,7 +95,18 @@ paths:
   /api/v1/devices/scan:
     get:
       summary: Scan for Devices
-      description: Triggers a device scan. When connect=true (default), scans first and automatically fills missing machine and scale slots without replacing connected devices. When connect=false, performs discovery only.
+      description: >
+        Triggers a device scan. When connect=true (default), scans first and
+        automatically fills missing machine and scale slots without replacing
+        connected devices. When connect=false, performs discovery only. During
+        the protected post-wake preferred-scale recovery window, an explicit
+        scan - discovery-only included - is deferred and coalesced with any
+        other pending explicit scan instead of preempting the background
+        preferred-scale watch. At most one scan runs when the window ends. The
+        pending scan is dropped instead when the preferred scale reconnects
+        first, when the machine disconnects, when the preferred scale is
+        cleared, or when Decaid shuts down; the waiting request then completes
+        without a scan.
       tags: [Devices]
       parameters:
         - name: connect
@@ -105,14 +116,16 @@ paths:
             type: boolean
             default: true
         - name: quick
-          description: If true, Decaid returns an empty array immediately while the same scan-first policy continues in the background. Useful when polling for device updates manually.
+          description: If true, Decaid returns an empty array immediately while the same scan-first policy continues in the background, after any post-wake deferral has elapsed. Useful when polling for device updates manually.
           in: query
           schema:
             type: boolean
             default: false
       responses:
         "200":
-          description: Scan started successfully
+          description: >
+            Device inventory after the scan, or immediately when a pending scan
+            is dropped or quick=true is set, before any deferred scan runs.
           content:
             application/json:
               schema:
@@ -5293,6 +5306,22 @@ paths:
         Submits user feedback as a GitHub issue. Logs and system info are
         attached as a private Gist when requested. Requires the app to be
         built with `--dart-define=GITHUB_FEEDBACK_TOKEN=<token>`.
+        Requires an authenticated Decent account. Stored credentials are verified
+        before any Gist upload, GitHub issue creation, or Support message.
+        Verification has a 30-second deadline, including credential reads and
+        the complete upstream response. Missing, rejected, or unverifiable
+        credentials (including timeout) return 400, even without a GitHub token.
+        Trusted-LAN callers use the host's account without separate caller authentication.
+        Support linking is best-effort after issue creation. Only the support
+        message ID, when available, is added to the public issue. The Support
+        response needs only messageId; no user ID is requested or published.
+        The proposed messageId format is a positive JSON integer or an ASCII
+        decimal string (1-256 digits, no leading zeros). The value 1 is reserved
+        for the temporary acknowledgement and is never published as an ID.
+        Invalid IDs skip linking without failing the created issue. The backend
+        maintainer must confirm the numeric format, lookup uniqueness, and public safety.
+        A successful Support delivery without a recognized receipt has no message
+        ID and skips the GitHub update; it does not fail delivery-only callers.
       tags: [System]
       requestBody:
         required: true
@@ -5308,11 +5337,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/FeedbackResponse"
         "400":
-          description: Missing or empty description
+          description: Missing or empty description, or Decent account not currently verified as authenticated
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+              examples:
+                accountRequired:
+                  value:
+                    success: false
+                    error: Decent account required
+                    message: You must be logged in to your Decent account to submit feedback.
+                verificationUnavailable:
+                  value:
+                    success: false
+                    error: Decent account required
+                    message: Could not verify your Decent account. Check your connection and try again.
         "500":
           description: Submission failed or internal error
           content:
@@ -5320,7 +5360,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "503":
-          description: Feedback service not configured (no GitHub token)
+          description: Account authenticated but feedback service not configured (no GitHub token)
           content:
             application/json:
               schema:

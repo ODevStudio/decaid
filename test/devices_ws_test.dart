@@ -13,13 +13,32 @@ import 'package:reaprime/src/controllers/scale_controller.dart';
 import 'package:reaprime/src/models/device/device.dart';
 import 'package:reaprime/src/models/device/impl/bengle/bengle_virtual_scale.dart';
 import 'package:reaprime/src/models/device/impl/bengle/mock_bengle.dart';
+import 'package:reaprime/src/models/device/machine.dart';
+import 'package:reaprime/src/models/device/scan_filter.dart';
+import 'package:reaprime/src/models/device/scan_result.dart';
 import 'package:reaprime/src/settings/settings_controller.dart';
 import 'package:reaprime/src/services/webserver_service.dart';
 
+import 'helpers/mock_de1_controller.dart';
 import 'helpers/mock_device_discovery_service.dart';
+import 'helpers/mock_device_scanner.dart';
+import 'helpers/mock_scale_controller.dart';
 import 'helpers/mock_settings_service.dart';
+import 'helpers/test_de1.dart';
 import 'helpers/test_scale.dart';
 import 'helpers/test_sensor.dart';
+
+class _FailingWsScanController extends DeviceController {
+  _FailingWsScanController(super.services);
+
+  int scanAttempts = 0;
+
+  @override
+  Future<ScanResult> scanForDevices({ScanFilter? filter}) async {
+    scanAttempts++;
+    throw StateError('simulated scan failure');
+  }
+}
 
 void main() {
   late DeviceController deviceController;
@@ -30,6 +49,7 @@ void main() {
   late DevicesHandler devicesHandler;
   late HttpServer server;
   late Uri wsUri;
+  late SettingsController settingsController;
 
   setUp(() async {
     mockDiscovery = MockDeviceDiscoveryService();
@@ -39,7 +59,7 @@ void main() {
     de1Controller = De1Controller(controller: deviceController);
     scaleController = ScaleController();
 
-    final settingsController = SettingsController(MockSettingsService());
+    settingsController = SettingsController(MockSettingsService());
     await settingsController.loadSettings();
 
     connectionManager = ConnectionManager(
@@ -368,6 +388,215 @@ void main() {
       expect(update, containsPair('scanning', isA<bool>()));
 
       await channel.sink.close();
+    });
+
+    group('deferred scans during the post-wake scale lease', () {
+      const leaseNeverExpiresOnHostClock = Duration(minutes: 5);
+      late MockDeviceScanner scanner;
+      late MockDe1Controller leaseDe1Controller;
+      late ConnectionManager leaseManager;
+      late DevicesHandler leaseHandler;
+      late HttpServer leaseServer;
+      late Uri leaseWsUri;
+      late TestDe1 machine;
+
+      (IOWebSocketChannel, Stream<Map<String, dynamic>>) connectLeaseWs() {
+        final channel = IOWebSocketChannel.connect(leaseWsUri);
+        final messages = channel.stream
+            .map((msg) => jsonDecode(msg.toString()) as Map<String, dynamic>)
+            .asBroadcastStream();
+        return (channel, messages);
+      }
+
+      Future<void> waitUntil(bool Function() condition, String reason) async {
+        final deadline = DateTime.now().add(const Duration(seconds: 5));
+        while (!condition()) {
+          if (DateTime.now().isAfter(deadline)) {
+            fail('Timed out waiting for $reason');
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+      }
+
+      Future<void> waitForDeferredScanToQueue({required bool connect}) {
+        return waitUntil(
+          () =>
+              leaseManager.explicitScanDisposition(connect: connect) ==
+              'coalesced',
+          'the client scan to queue behind the post-wake lease',
+        );
+      }
+
+      Future<void> drainPendingCallbacks() async {
+        for (var i = 0; i < 5; i++) {
+          await Future<void>.delayed(Duration.zero);
+        }
+      }
+
+      setUp(() async {
+        scanner = MockDeviceScanner()..supportsWatch = true;
+        leaseDe1Controller = MockDe1Controller(controller: deviceController);
+        leaseManager = ConnectionManager(
+          deviceScanner: scanner,
+          de1Controller: leaseDe1Controller,
+          scaleController: MockScaleController(),
+          settingsController: settingsController,
+        )..deferredScaleScanDelay = leaseNeverExpiresOnHostClock;
+        leaseHandler = DevicesHandler(
+          controller: deviceController,
+          connectionManager: leaseManager,
+        );
+        final app = Router().plus;
+        leaseHandler.addRoutes(app);
+        leaseServer = await io.serve(app.call, 'localhost', 0);
+        leaseWsUri = Uri.parse(
+          'ws://localhost:${leaseServer.port}/ws/v1/devices',
+        );
+
+        await settingsController.setPreferredScaleId('lease-scale');
+        machine = TestDe1(deviceId: 'lease-de1');
+        leaseDe1Controller.de1Subject.add(machine);
+        await Future<void>.delayed(Duration.zero);
+        machine.emitStateAndSubstate(
+          MachineState.sleeping,
+          MachineSubstate.idle,
+        );
+        machine.emitStateAndSubstate(MachineState.idle, MachineSubstate.idle);
+        await waitUntil(
+          () =>
+              leaseManager.explicitScanDisposition(connect: false) == 'queued',
+          'the post-wake scale lease to arm',
+        );
+      });
+
+      tearDown(() async {
+        await leaseServer.close(force: true);
+        leaseHandler.dispose();
+        await leaseManager.dispose();
+      });
+
+      test(
+        'scan during the lease is deferred and runs once after it',
+        () async {
+          final (channel, messages) = connectLeaseWs();
+
+          await waitForState(messages);
+          channel.sink.add(jsonEncode({'command': 'scan', 'connect': false}));
+          channel.sink.add(
+            jsonEncode({'command': 'connect', 'deviceId': 'missing'}),
+          );
+          final error = await waitForError(messages);
+          expect(error['error'], contains('Device not found'));
+          await waitForDeferredScanToQueue(connect: false);
+          expect(mockDiscovery.scanCallCount, 0);
+
+          leaseManager.debugExpirePostWakeScaleLease();
+          await waitUntil(
+            () => mockDiscovery.scanCallCount == 1,
+            'the deferred discovery-only scan',
+          );
+          expect(mockDiscovery.scanCallCount, 1);
+
+          await channel.sink.close();
+        },
+      );
+
+      group('deferred scan failure', () {
+        late _FailingWsScanController failingController;
+        late DevicesHandler failingHandler;
+        late HttpServer failingServer;
+        late Uri failingWsUri;
+
+        (IOWebSocketChannel, Stream<Map<String, dynamic>>) connectFailingWs() {
+          final channel = IOWebSocketChannel.connect(failingWsUri);
+          final messages = channel.stream
+              .map((msg) => jsonDecode(msg.toString()) as Map<String, dynamic>)
+              .asBroadcastStream();
+          return (channel, messages);
+        }
+
+        setUp(() async {
+          failingController = _FailingWsScanController([mockDiscovery]);
+          failingHandler = DevicesHandler(
+            controller: failingController,
+            connectionManager: leaseManager,
+          );
+          final app = Router().plus;
+          failingHandler.addRoutes(app);
+          failingServer = await io.serve(app.call, 'localhost', 0);
+          failingWsUri = Uri.parse(
+            'ws://localhost:${failingServer.port}/ws/v1/devices',
+          );
+        });
+
+        tearDown(() async {
+          await failingServer.close(force: true);
+          failingHandler.dispose();
+        });
+
+        test('waiting scan reports the deferred failure', () async {
+          final (channel, messages) = connectFailingWs();
+
+          await waitForState(messages);
+          channel.sink.add(
+            jsonEncode({'command': 'scan', 'connect': false, 'quick': false}),
+          );
+          await waitForDeferredScanToQueue(connect: false);
+          expect(failingController.scanAttempts, 0);
+
+          leaseManager.debugExpirePostWakeScaleLease();
+
+          final error = await waitForError(messages);
+          expect(error['error'], contains('Scan failed'));
+
+          await channel.sink.close();
+        });
+
+        test(
+          'quick scan keeps the deferred failure out of the socket',
+          () async {
+            final (channel, messages) = connectFailingWs();
+
+            await waitForState(messages);
+            final errorFrames = <Map<String, dynamic>>[];
+            final sub = messages
+                .where((msg) => msg.containsKey('error'))
+                .listen(errorFrames.add);
+
+            channel.sink.add(
+              jsonEncode({'command': 'scan', 'connect': false, 'quick': true}),
+            );
+            await waitForDeferredScanToQueue(connect: false);
+            expect(failingController.scanAttempts, 0);
+
+            leaseManager.debugExpirePostWakeScaleLease();
+            await waitUntil(
+              () => failingController.scanAttempts == 1,
+              'the deferred discovery-only scan to run',
+            );
+            await drainPendingCallbacks();
+
+            channel.sink.add(
+              jsonEncode({'command': 'connect', 'deviceId': 'missing'}),
+            );
+            final probe = await waitForError(messages);
+
+            expect(
+              probe['error'],
+              contains('Device not found'),
+              reason: 'the probe frame is emitted after the deferred failure',
+            );
+            expect(
+              errorFrames,
+              hasLength(1),
+              reason: 'the socket carried only the probe error frame',
+            );
+
+            await sub.cancel();
+            await channel.sink.close();
+          },
+        );
+      });
     });
 
     test('connect command connects a scale device', () async {

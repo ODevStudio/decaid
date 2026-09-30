@@ -405,6 +405,49 @@ List<Device> get devices =>
 
 The ConnectionManager is the centralized orchestrator for all device connection decisions. It replaces the previously scattered auto-connect logic that was spread across DeviceController, ScaleController, and De1StateManager.
 
+### Pending connect attempts
+
+Machine and primary-scale connects each carry their own attempt record: the
+attempted device instance, its device ID and transport type, a scan/session
+owner, and invalidated/source-pending flags. The device controller checks its
+connection generation after source connect and scale readiness before
+publishing a candidate, so an attempt invalidated while its source work was
+still running cannot adopt the late candidate.
+
+Invalidating an attempt releases admission immediately; a replacement connect
+is admitted without waiting for the stale source to settle. The stale attempt's
+record drives its own settlement and cleanup:
+it retires the exact device instance it attempted once its source work settles,
+including when the source throws after opening a physical link and before
+controller adoption, or when a candidate was already adopted before a
+preference write finished. Cleanup cannot start while the source is pending.
+Retirement is deferred for a same-link replacement: a different adopted
+instance, or a newer current attempt, with the same device ID and transport
+type, since they may share one physical link; that is logged as a deferred
+same-link replacement and the attempt is released. A current replacement owns
+any deferred retirement until it settles: adoption discards it; failure or
+invalidation retires the stale link (or transfers it to another current
+replacement). The current-attempt check matters because a
+same-link replacement can be mid-connect before it is adopted, and a stale BLE
+disconnect is not instance-local: `UniversalBle.disconnect(deviceId)` runs
+behind the per-device lifecycle gate, so an adopted-only check would let the
+stale attempt tear down the replacement's link. The current-attempt clause is
+limited to BLE for that reason; serial and WiFi closes only their own port or
+socket, so a stale instance on those transports is retired unless a same-link
+replacement is already adopted. A different device ID or transport type is
+retired independently as well. If disconnect
+fails, the attempt is quarantined, the failure is reported, and an explicit
+disconnect retries retirement; a quarantined attempt never blocks a new
+connect. Shutdown waits for pending source work and retirement before teardown.
+
+Timeout, cancellation from the scan or selection session that owns the attempt,
+adapter loss for a BLE attempt, explicit disconnect, and shutdown invalidate
+pending attempts. Cancelling a scan or selection session only invalidates the
+attempt it owns, so an unrelated direct REST/WS or background watch connect
+survives the cancellation. The coordinated USB attach handover retains its
+separate adopt-then-release path. An already-started preference-service write
+is not cancelled by an attempt fence.
+
 ### Connection Status
 
 ConnectionManager exposes a `ConnectionStatus` stream driven by the
@@ -1518,6 +1561,12 @@ flutter run --dart-define=simulate=machine,scale   # Simulate DE1 and scale
 ```
 
 Supported types: `machine` (DE1), `bengle`, `scale`, `sensor` (comma-separated).
+
+`MockScale` resumes weight snapshots after disconnecting and reconnecting,
+including when reconnecting as an auxiliary scale. Its selected simulated
+machine is retained across disconnects, so reconnecting without another scan
+also resumes machine-driven weight. Calling `onConnect()` on an already
+connected scale preserves an intentional simulated data stall.
 
 `simulate=1` enables every type, so it surfaces both `MockDe1` and
 `MockBengle` simultaneously — `ConnectionManager`'s preferred-device

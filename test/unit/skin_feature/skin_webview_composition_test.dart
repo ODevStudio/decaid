@@ -1,6 +1,9 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reaprime/src/settings/feature_flags.dart';
@@ -12,6 +15,37 @@ import 'package:yaml/yaml.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../helpers/mock_settings_service.dart';
+
+Future<void> _captureCompositionScreenshot(
+  WidgetTester tester,
+  GlobalKey key,
+  String name,
+) async {
+  const directory = String.fromEnvironment('SKIN_COMPOSITION_SCREENSHOT_DIR');
+  if (directory.isEmpty) return;
+  await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    await Directory(directory).create(recursive: true);
+    await File(
+      '$directory/$name.png',
+    ).writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
+}
+
+class _FailingSettingsService extends MockSettingsService {
+  int saveAttempts = 0;
+
+  @override
+  Future<void> setFeatureFlag(FeatureFlag flag, bool value) async {
+    saveAttempts++;
+    if (saveAttempts == 1) throw StateError('Settings unavailable');
+    await super.setFeatureFlag(flag, value);
+  }
+}
 
 class _MountCounter extends StatefulWidget {
   final VoidCallback onMount;
@@ -33,6 +67,20 @@ class _MountCounterState extends State<_MountCounter> {
 }
 
 void main() {
+  setUpAll(() async {
+    const directory = String.fromEnvironment('SKIN_COMPOSITION_SCREENSHOT_DIR');
+    if (directory.isEmpty) return;
+    for (final family in ['Roboto', 'packages/shadcn_ui/Geist']) {
+      await (FontLoader(family)..addFont(
+            rootBundle.load('packages/shadcn_ui/fonts/Geist[wght].ttf'),
+          ))
+          .load();
+    }
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+  });
+
   test('composition remains hybrid until explicitly enabled', () async {
     final service = MockSettingsService();
     final settings = SettingsController(service);
@@ -52,6 +100,47 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    'failed composition persistence keeps the current mode and retries',
+    () async {
+      final service = _FailingSettingsService();
+      final settings = SettingsController(service);
+      await settings.loadSettings();
+      var notifications = 0;
+      settings.addListener(() => notifications++);
+
+      await expectLater(
+        settings.setFeatureFlag(
+          FeatureFlag.androidTextureLayerComposition,
+          true,
+        ),
+        throwsStateError,
+      );
+
+      expect(
+        settings.isFeatureFlagEnabled(
+          FeatureFlag.androidTextureLayerComposition,
+        ),
+        isFalse,
+      );
+      expect(notifications, 0);
+      await settings.setFeatureFlag(
+        FeatureFlag.androidTextureLayerComposition,
+        true,
+      );
+      expect(service.saveAttempts, 2);
+      expect(notifications, 1);
+      final reloaded = SettingsController(service);
+      await reloaded.loadSettings();
+      expect(
+        reloaded.isFeatureFlagEnabled(
+          FeatureFlag.androidTextureLayerComposition,
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test('only Android switches creation settings', () {
     for (final platform in TargetPlatform.values) {
@@ -152,28 +241,74 @@ void main() {
     );
   });
 
-  testWidgets(
-    'native diagnostic selector saves an Android mode',
-    (tester) async {
-      tester.view.physicalSize = const Size(360, 800);
+  for (final size in [const Size(360, 800), const Size(1280, 800)]) {
+    testWidgets('native diagnostic selector saves an Android mode at $size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final settings = SettingsController(MockSettingsService());
+      final key = GlobalKey();
+      final name = 'composition-${size.width.toInt()}';
       await tester.pumpWidget(
-        ShadApp(home: AdvancedPage(controller: settings)),
+        RepaintBoundary(
+          key: key,
+          child: ShadApp(home: AdvancedPage(controller: settings)),
+        ),
       );
       await tester.pumpAndSettle();
+      await _captureCompositionScreenshot(tester, key, '$name-hc');
       await tester.tap(find.text('HC (default)'));
       await tester.pumpAndSettle();
+      await _captureCompositionScreenshot(tester, key, '$name-options');
       await tester.tap(find.text('TLHC (HC fallback)').last);
       await tester.pumpAndSettle();
+      await _captureCompositionScreenshot(tester, key, '$name-tlhc');
       expect(
         settings.isFeatureFlagEnabled(
           FeatureFlag.androidTextureLayerComposition,
         ),
         isTrue,
       );
+      expect(tester.takeException(), isNull);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  testWidgets(
+    'failed composition save keeps the displayed mode and allows retry',
+    (tester) async {
+      final service = _FailingSettingsService();
+      final settings = SettingsController(service);
+      await settings.loadSettings();
+      await tester.pumpWidget(
+        ScaffoldMessenger(
+          child: ShadApp(home: AdvancedPage(controller: settings)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HC (default)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('TLHC (HC fallback)').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Composition setting could not be saved.'),
+        findsOneWidget,
+      );
+      final dropdown = find.byWidgetPredicate(
+        (widget) => widget is DropdownButton<bool>,
+      );
+      expect(tester.widget<DropdownButton<bool>>(dropdown).value, isFalse);
+
+      await tester.tap(find.text('HC (default)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('TLHC (HC fallback)').last);
+      await tester.pumpAndSettle();
+
+      expect(service.saveAttempts, 2);
+      expect(tester.widget<DropdownButton<bool>>(dropdown).value, isTrue);
       expect(tester.takeException(), isNull);
     },
     variant: TargetPlatformVariant.only(TargetPlatform.android),

@@ -70,7 +70,8 @@ The native **Advanced > Skin composition (diagnostic)** selector offers
 **HC (default)** and **TLHC (HC fallback)**. Hybrid composition remains the
 default. The texture-layer option is experimental and persisted through the
 existing feature-flag settings. Changing it recreates the embedded WebView;
-unsaved page state may be lost. Other platforms are unaffected.
+unsaved page state may be lost. Failed saves keep the previous mode selected
+and report the failure. Other platforms are unaffected.
 
 With the pinned Android plugin, `useHybridComposition: false` requests
 texture-layer hybrid composition with hybrid fallback, not Virtual Display.

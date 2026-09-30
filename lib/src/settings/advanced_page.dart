@@ -76,43 +76,48 @@ class AdvancedPage extends StatelessWidget {
                     horizontal: 16,
                     vertical: 8,
                   ),
-                  child: DropdownButtonFormField<bool>(
-                    initialValue: controller.isFeatureFlagEnabled(
-                      FeatureFlag.androidTextureLayerComposition,
-                    ),
+                  child: InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'Skin composition (diagnostic)',
                     ),
-                    isExpanded: true,
-                    items: const [
-                      DropdownMenuItem(
-                        value: false,
-                        child: Text('HC (default)'),
-                      ),
-                      DropdownMenuItem(
-                        value: true,
-                        child: Text('TLHC (HC fallback)'),
-                      ),
-                    ],
-                    onChanged: (value) async {
-                      if (value == null) return;
-                      try {
-                        await controller.setFeatureFlag(
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<bool>(
+                        value: controller.isFeatureFlagEnabled(
                           FeatureFlag.androidTextureLayerComposition,
-                          value,
-                        );
-                      } catch (_) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Composition setting could not be saved.',
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                    },
+                        ),
+                        isExpanded: true,
+                        isDense: true,
+                        items: const [
+                          DropdownMenuItem(
+                            value: false,
+                            child: Text('HC (default)'),
+                          ),
+                          DropdownMenuItem(
+                            value: true,
+                            child: Text('TLHC (HC fallback)'),
+                          ),
+                        ],
+                        onChanged: (value) async {
+                          if (value == null) return;
+                          try {
+                            await controller.setFeatureFlag(
+                              FeatureFlag.androidTextureLayerComposition,
+                              value,
+                            );
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Composition setting could not be saved.',
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                    ),
                   ),
                 ),
                 const SettingsDivider(),

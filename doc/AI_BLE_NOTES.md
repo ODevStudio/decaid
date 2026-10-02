@@ -43,6 +43,14 @@ The single BLE transport is `UniversalBleTransport` in `lib/src/services/ble/uni
 
 Android does not guarantee any Dart, activity, application, or Flutter-engine callback for Settings Force stop, SIGKILL, or other abrupt process death. Those paths can skip cleanup entirely and must not be described as supported. Decaid still pins `universal_ble` 2.2.6, whose Android `onDetachedFromEngine()` does not close active central GATT clients, so native engine-detach cleanup is not shipped with this lifecycle change.
 
+During graceful shutdown, disabled scale power management uses the primary
+scale's existing `TransportHandoffScale.disconnectForHandoff()` when available,
+including retirement of an invalidated in-flight connection attempt and
+deferred or quarantined retirement cleanup.
+The normal Decent BLE `disconnect()` may send a power-off command, so it must
+not serve as a transport-only shutdown in keep-on mode. Manual disconnects,
+other power modes and auxiliary cleanup retain their existing behavior.
+
 ## Connection Flow
 
 `ConnectionManager` supports three distinct connection intents, selected via
@@ -68,6 +76,16 @@ produces ambiguity (multiple candidates for an unoccupied slot),
 a `ConnectionSelectionSession` holds the immutable scan snapshot.
 `selectMachine()` and `selectScale()` continue the session against the
 session-owned canonical candidates — no new scan fires.
+
+After a sleeping-to-awake transition, when the preferred scale is missing and
+background ScaleWatch owns reacquisition, `ConnectionManager` protects the
+watch for the existing three-second wake window. REST/WS explicit scans
+(including discovery-only requests) coalesce into one deferred request rather
+than pausing the watch. A successful scale reconnect or machine disconnect
+drops that request; otherwise it runs after the window and any active
+connection work. Machine recovery is never deferred by this scale lease. A
+full `scanAndConnect()` from a native in-app scan control supersedes a
+deferred discovery-only request, so lease deferral never downgrades it.
 
 ### `scaleOnly` / scale recovery
 
@@ -235,6 +253,14 @@ A platform can publish that update late for a link that a newer connection attem
 Decaid therefore pins `universal_ble` on the unreleased commit `9c50e12fcc33b061fe37e7037c69e44e30d96c79` (a merge of `tadelv/universal_ble` `main` into `tadelv/universal_ble` PR #24). It confirms the authoritative link state before draining and holds the device queue while that confirmation is in flight, so a genuine disconnect still cancels pending commands before the next one can dispatch. The hold is owned by the newest confirmation for that device: `connected` or `connecting` releases it, an inconclusive confirmation clears it, a queue created while the hold is live starts held, and a superseded confirmation can neither resume nor clear. Releasing a live-link hold resumes dispatch only once the active command has completed, so a confirmed stale disconnect cannot run two commands on the same device at once. Re-pin to a released tag once that change lands.
 
 `test/universal_ble_transport_recovery_test.dart`, group `stale disconnect vs queued GATT work`, guards the Decaid side of that contract: a stale update must leave the in-flight and queued writes alive with the queue still `running`, confirming the stale update as connected must not dispatch the queued write while the in-flight write is still running, a genuine disconnect must still cancel exactly once and publish exactly one `disconnected`, and a genuine disconnect whose link probe is still pending must hold queued work instead of dispatching it.
+
+## Stale Retirement Is Deferred Only For A Shared BLE Link
+
+A stale connect attempt that a replacement connect superseded retires its own device instance once its source work settles. `ConnectionManager._retireMachine` / `_retireScale` defer that physical disconnect only when a same-link replacement exists: a different adopted instance, or a newer current attempt, with the same device ID and transport type. Deferral attaches retirement to the newer attempt, so the stale attempt does not disconnect a link the replacement is using. When the replacement settles, adoption discards the deferred retirement; failure or invalidation retires the link or transfers retirement to the next current replacement.
+
+The current-attempt clause is limited to `TransportType.ble`. `UniversalBleTransport.disconnect()` runs `UniversalBle.disconnect(deviceId)` inside `BleLifecycleGate` keyed on the normalized device ID, so a stale instance's disconnect tears down any newer instance's link for that device. Serial closes only its own port handle and WiFi only its own socket, so deferring on those transports would strand the stale handle whenever the same-ID replacement fails before adopting; a stale serial or WiFi instance is therefore still retired while a same-ID replacement is mid-connect. The guard compares raw device IDs while the gate keys on `normalizeBleDeviceId`, so only a case-differing pair for one physical device could miss what the gate treats as one link; both instances carry the same platform string in practice.
+
+`test/controllers/connection_manager_test.dart` guards both directions: a stale BLE attempt settling while a same-ID BLE replacement is still connecting must not issue the physical disconnect and the replacement must still succeed (fakes model one link per device ID), a failed same-link replacement must retire the deferred physical link, and a stale serial same-ID attempt must still retire its own link while the serial replacement succeeds.
 
 ## Plugin Connection Deadlines
 

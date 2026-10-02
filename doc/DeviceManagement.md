@@ -405,6 +405,49 @@ List<Device> get devices =>
 
 The ConnectionManager is the centralized orchestrator for all device connection decisions. It replaces the previously scattered auto-connect logic that was spread across DeviceController, ScaleController, and De1StateManager.
 
+### Pending connect attempts
+
+Machine and primary-scale connects each carry their own attempt record: the
+attempted device instance, its device ID and transport type, a scan/session
+owner, and invalidated/source-pending flags. The device controller checks its
+connection generation after source connect and scale readiness before
+publishing a candidate, so an attempt invalidated while its source work was
+still running cannot adopt the late candidate.
+
+Invalidating an attempt releases admission immediately; a replacement connect
+is admitted without waiting for the stale source to settle. The stale attempt's
+record drives its own settlement and cleanup:
+it retires the exact device instance it attempted once its source work settles,
+including when the source throws after opening a physical link and before
+controller adoption, or when a candidate was already adopted before a
+preference write finished. Cleanup cannot start while the source is pending.
+Retirement is deferred for a same-link replacement: a different adopted
+instance, or a newer current attempt, with the same device ID and transport
+type, since they may share one physical link; that is logged as a deferred
+same-link replacement and the attempt is released. A current replacement owns
+any deferred retirement until it settles: adoption discards it; failure or
+invalidation retires the stale link (or transfers it to another current
+replacement). The current-attempt check matters because a
+same-link replacement can be mid-connect before it is adopted, and a stale BLE
+disconnect is not instance-local: `UniversalBle.disconnect(deviceId)` runs
+behind the per-device lifecycle gate, so an adopted-only check would let the
+stale attempt tear down the replacement's link. The current-attempt clause is
+limited to BLE for that reason; serial and WiFi closes only their own port or
+socket, so a stale instance on those transports is retired unless a same-link
+replacement is already adopted. A different device ID or transport type is
+retired independently as well. If disconnect
+fails, the attempt is quarantined, the failure is reported, and an explicit
+disconnect retries retirement; a quarantined attempt never blocks a new
+connect. Shutdown waits for pending source work and retirement before teardown.
+
+Timeout, cancellation from the scan or selection session that owns the attempt,
+adapter loss for a BLE attempt, explicit disconnect, and shutdown invalidate
+pending attempts. Cancelling a scan or selection session only invalidates the
+attempt it owns, so an unrelated direct REST/WS or background watch connect
+survives the cancellation. The coordinated USB attach handover retains its
+separate adopt-then-release path. An already-started preference-service write
+is not cancelled by an attempt fence.
+
 ### Connection Status
 
 ConnectionManager exposes a `ConnectionStatus` stream driven by the
@@ -584,6 +627,19 @@ burst monopolizes the shared radio and starves DE1 GATT traffic
 while the backoff gaps meant a freshly powered-on scale could wait up
 to 60s to connect.
 
+### Protected post-wake preferred-scale reacquisition
+
+After a sleeping-to-awake transition with the preferred scale disconnected and
+background `ScaleWatch` selected, `ConnectionManager` protects the watch during
+the existing 3-second wake window. REST and devices-WebSocket explicit scans,
+including discovery-only requests, are deferred and coalesced rather than
+preempting the watch. Scale reconnection, machine disconnection, a cleared
+preferred scale, or shutdown drops the pending request; otherwise at most one
+deferred scan runs after the window (and any active connection work). Machine
+recovery is never deferred by this scale lease. A native in-app scan
+(`scanAndConnect()`, launcher and retry UI) supersedes a deferred
+discovery-only request and still performs the full connection policy.
+
 Watch lifecycle details:
 
 - Armed whenever *machine connected && preferred scale set && scale not
@@ -682,6 +738,7 @@ This is the safety net. Device implementations should ALSO catch
 Device preferences are stored via `SettingsController`:
 - `preferredMachineId` — auto-set on successful machine connection
 - `preferredScaleId` — auto-set on successful scale connection
+- `preferredGrinderDeviceId` — auto-set on successful runtime grinder connection
 - Configurable in Settings → Device Management
 
 Identity remains per transport. BLE and USB IDs for the same physical machine
@@ -778,7 +835,7 @@ sensor is connected, skins can call the `measure` command through the existing
 Sensors API and read TDS, temperature, refractive index, and status values from
 the sensor data stream.
 
-`PluginDeviceService` is a `DeviceDiscoveryService` that contributes sensors
+`PluginDeviceService` is a `DeviceDiscoveryService` that contributes devices
 registered by plugin generations. This keeps plugin-backed sensors on the same
 `DeviceController` → `SensorController` path as native sensors. Public identity
 comes from plugin id, declared driver id, and plugin-local instance id; unload
@@ -786,6 +843,30 @@ removes the retiring generation without changing that identity for a later
 reload. Plugin connection handlers must complete protocol initialization before
 the sensor reports `connected`. Registrations are runtime-only and are not added
 to remembered-device selection.
+
+### GrinderController
+
+`GrinderController` owns one selected runtime `GrinderDevice`, its latest
+validated snapshot, and command forwarding. Replacement disconnects the old
+instance and generation-fences late publications. New snapshot subscribers
+receive the current projection immediately. Disconnect and replacement clear
+the retained snapshot before asynchronous teardown, without emitting null frames.
+`ConnectionManager.connectGrinder()` uses this controller from
+the generic devices API and connects `preferredGrinderDeviceId` only when that
+device appears in an existing normal scan result, after machine and primary-scale
+selection resolves and policy settles. While either primary picker is pending,
+the grinder attempt remains deferred. Cancellation or a superseding scan discards
+the deferred candidates. Grinder initialization runs independently of primary
+readiness, selection and scale recovery; failures never change machine/scale connection
+status. Plugin protocol initialization has the same default 10-second budget for
+network and BLE grinders. It adds no grinder scanner or reconnect scheduler, and
+does not participate in early stopping, primary ambiguity resolution or scale-only
+scans.
+
+Runtime grinder identity is not equipment metadata. Persisted `Grinder.id` is a
+UUID used by `/api/v1/grinders` and workflow records. `GrinderDevice.deviceId`
+identifies a live transport/plugin device. `preferredGrinderDeviceId` stores
+that runtime `deviceId`, never the persisted UUID.
 
 ### Bengle EBus tap
 
@@ -831,7 +912,7 @@ of vanishing. Cross-transport (BLE/USB/WiFi) by construction.
   `{id, name, type}` off the connected device. A null emission (disconnect)
   does **not** forget — the device stays remembered.
 - **Availability:** computed at the API layer. `DevicesStateAggregator` /
-  `DevicesHandler` merge discovered devices and the actively connected scale
+  `DevicesHandler` merge discovered devices and the actively connected scale or grinder
   (`available: true`) with remembered devices that aren't present
   (`available: false`, `state: "disconnected"`) via the shared
   `buildAvailabilityDeviceList`. The aggregator re-emits when the registry or
@@ -970,7 +1051,7 @@ never retain the disconnected instance beside its connected replacement.
    ↓
 2. Create discovery services with device mappings
    ↓
-3. Create DeviceController(services), De1Controller, ScaleController
+3. Create DeviceController(services), De1Controller, ScaleController, GrinderController
    ↓
 4. Create RememberedDevicesController, initialize (loads + migrates registry)
    ↓
@@ -1010,6 +1091,22 @@ The legacy `home_feature` StatusTile reconnect affordance is retired. Native
 scan and retry controls call `scanAndConnect()`, so they perform a complete
 scan before filling missing slots. The launcher’s **Connect your machine** hero
 opens `LauncherScanPage`, which reuses this scan-first flow.
+
+### Scale Power Settings
+
+`scalePowerMode` controls automatic power management for the primary scale.
+With `disabled` (keep scale on), machine sleep sends no scale power command.
+On graceful app exit, Decaid releases the transport without sending power-off
+when the driver supports `TransportHandoffScale`, including Decent BLE scales.
+This also applies when a primary-scale connection finishes during shutdown or
+an invalidated connection attempt still needs retirement cleanup.
+Drivers without that capability use their normal disconnect operation.
+Explicit user-requested disconnects and auxiliary-scale cleanup are unchanged.
+
+Settings changes apply to the next machine-state transition or graceful exit;
+no web-server or app restart is needed. Changing the setting does not undo a
+power action already taken while the machine was sleeping. Firmware auto-sleep
+and operating-system force stops remain outside this setting's guarantees.
 
 ### Machine Wake → Scale Reconnect Flow
 
@@ -1506,6 +1603,12 @@ flutter run --dart-define=simulate=machine,scale   # Simulate DE1 and scale
 
 Supported types: `machine` (DE1), `bengle`, `scale`, `sensor` (comma-separated).
 
+`MockScale` resumes weight snapshots after disconnecting and reconnecting,
+including when reconnecting as an auxiliary scale. Its selected simulated
+machine is retained across disconnects, so reconnecting without another scan
+also resumes machine-driven weight. Calling `onConnect()` on an already
+connected scale preserves an intentional simulated data stall.
+
 `simulate=1` enables every type, so it surfaces both `MockDe1` and
 `MockBengle` simultaneously — `ConnectionManager`'s preferred-device
 policy picks one. For deterministic behavior in tests / CI prefer the
@@ -1726,7 +1829,7 @@ does not trigger native fallback in the same attempt. A timed-out teardown retai
 the claim until native disconnection is confirmed. Adapter loss revokes sessions
 without attempting protocol cleanup over a lost link.
 
-Plugin Sensors join the existing SensorController and REST/WebSocket APIs. Their
+Plugin Sensors and Grinders join the existing controller and REST/WebSocket APIs. Their
 public IDs include plugin, driver, and physical identity. Remembered plugin IDs
 are not reconstructed through native quick-connect: fresh discovery must establish
 current ownership. A BLE plugin driver may keep up to 4 physical bindings active

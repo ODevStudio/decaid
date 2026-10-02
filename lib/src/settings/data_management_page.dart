@@ -11,6 +11,7 @@ import 'package:reaprime/src/util/rot13.dart';
 import 'package:reaprime/src/controllers/persistence_controller.dart';
 import 'package:reaprime/src/controllers/de1_controller.dart';
 import 'package:reaprime/src/feedback_feature/feedback_view.dart';
+import 'package:reaprime/src/feedback_feature/feedback_button.dart';
 import 'package:reaprime/src/import/de1app_importer.dart';
 import 'package:reaprime/src/import/saf_folder_copier.dart';
 import 'package:reaprime/src/import/de1app_scanner.dart';
@@ -23,6 +24,7 @@ import 'package:reaprime/src/services/storage/bean_storage_service.dart';
 import 'package:reaprime/src/services/storage/grinder_storage_service.dart';
 import 'package:reaprime/src/services/storage/profile_storage_service.dart';
 import 'package:reaprime/src/settings/backup_import_response.dart';
+import 'package:reaprime/src/settings/backup_import_presentation.dart';
 import 'package:reaprime/src/services/webserver/data_export/backup_transfer_service.dart';
 import 'package:reaprime/src/services/export/archive_export.dart';
 import 'package:reaprime/src/settings/settings_controller.dart';
@@ -44,6 +46,7 @@ class DataManagementPage extends StatefulWidget {
     this.beanStorageService,
     this.grinderStorageService,
     this.workflowController,
+    this.importBackup,
   });
 
   static const routeName = '/data';
@@ -56,6 +59,11 @@ class DataManagementPage extends StatefulWidget {
   final BeanStorageService? beanStorageService;
   final GrinderStorageService? grinderStorageService;
   final WorkflowController? workflowController;
+  final Future<BackupImportResponse> Function(
+    String? filePath,
+    String strategy,
+  )?
+  importBackup;
 
   @override
   State<DataManagementPage> createState() => _DataManagementPageState();
@@ -244,7 +252,8 @@ class _DataManagementPageState extends State<DataManagementPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ShadButton.outline(
+          FeedbackButton(
+            accountService: widget.decentAccountService,
             onPressed: () => showFeedbackDialog(
               context,
               githubToken: rot13(
@@ -256,7 +265,6 @@ class _DataManagementPageState extends State<DataManagementPage> {
               serialNumbers: () => widget.de1Controller.seenSerials,
               accountService: widget.decentAccountService,
             ),
-            child: const Text("Send Feedback"),
           ),
         ],
       ),
@@ -502,13 +510,15 @@ class _DataManagementPageState extends State<DataManagementPage> {
         );
       }
 
-      final importResponse = await transfer.uploadZip(
-        'http://localhost:8080/api/v1/data/import',
-        strategy,
-        filePath: filePath,
-        readStream: readStream,
-        contentLength: length,
-      );
+      final importResponse = await (widget.importBackup != null
+          ? widget.importBackup!(filePath, strategy)
+          : transfer.uploadZip(
+              'http://localhost:8080/api/v1/data/import',
+              strategy,
+              filePath: filePath,
+              readStream: readStream,
+              contentLength: length,
+            ));
 
       if (!mounted) return;
 
@@ -527,7 +537,7 @@ class _DataManagementPageState extends State<DataManagementPage> {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
+        ).showSnackBar(backupImportErrorSnackBar(e));
       }
     } catch (e) {
       _log.severe("Failed to import backup", e);

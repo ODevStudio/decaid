@@ -145,6 +145,8 @@ default. The texture-layer option is experimental and persisted through the
 existing feature-flag settings. Changing it recreates the embedded WebView;
 unsaved page state may be lost. Failed saves keep the previous mode selected
 and report the failure. Other platforms are unaffected.
+Selections made while a save is pending are persisted in order, so the last
+selection wins. A failed save does not prevent a queued selection or retry.
 
 With the pinned Android plugin, `useHybridComposition: false` requests
 texture-layer hybrid composition with hybrid fallback, not Virtual Display.

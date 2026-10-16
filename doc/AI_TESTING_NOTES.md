@@ -117,6 +117,12 @@ The Android update snackbar lasts a day. Native upload-pause tests must cover
 that persistent banner already being present; queued account actions would
 otherwise remain invisible until the unrelated banner was dismissed.
 
+Support recovery also depends on URL launch mode: override the iOS target in a
+platform-interface test and assert `externalApplication`, not just simulated
+pause/resume callbacks. Post-consent proxy tests must distinguish a completed
+new login, an unfinished credential write, and a generation change during reads.
+Final credential reread failures must leave an upstream 401 intact.
+
 `PluginManager` accepts optional `connectWebSocket` / `connectSocket` /
 `connectSecureSocket` connectors (defaulting to `WebSocket.connect` /
 `Socket.connect` / `SecureSocket.connect`) forwarded to

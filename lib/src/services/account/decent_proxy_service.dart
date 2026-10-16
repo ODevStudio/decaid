@@ -97,7 +97,6 @@ class DecentProxyService {
     String? contentType,
     bool gzipBody = false,
   }) async {
-    final generation = authenticationGeneration?.call();
     final normalizedMethod = method.toUpperCase();
     if (normalizedMethod != 'GET' &&
         normalizedMethod != 'POST' &&
@@ -129,8 +128,18 @@ class DecentProxyService {
       throw DecentProxyConsentDeniedException();
     }
 
+    final generation = authenticationGeneration?.call();
     final credentials = await _credentials();
+    if (generation != authenticationGeneration?.call()) {
+      throw StateError('Decent account changed while reading credentials');
+    }
     if (credentials == null) throw DecentAccountNotLinkedException();
+    if (await isAuthKnownInvalid?.call() ?? false) {
+      throw DecentAccountAuthInvalidException();
+    }
+    if (generation != authenticationGeneration?.call()) {
+      throw StateError('Decent account changed while checking authentication');
+    }
 
     final uri = _buildUri(
       normalizedPath,
@@ -171,10 +180,20 @@ class DecentProxyService {
 
     if (response.statusCode == 401 &&
         onAuthFailure != null &&
-        generation == authenticationGeneration?.call() &&
-        await _credentials() == credentials &&
         generation == authenticationGeneration?.call()) {
-      onAuthFailure?.call();
+      try {
+        final currentCredentials = await _credentials();
+        if (currentCredentials == credentials &&
+            generation == authenticationGeneration?.call()) {
+          onAuthFailure?.call();
+        }
+      } catch (error, stackTrace) {
+        _log.warning(
+          'Could not revalidate account after proxy HTTP 401',
+          error,
+          stackTrace,
+        );
+      }
     }
 
     _log.info(

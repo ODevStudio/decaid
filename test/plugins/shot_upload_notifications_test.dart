@@ -2,7 +2,22 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:reaprime/src/plugins/shot_upload_notifications.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+
+class _RecordingUrlLauncher extends Fake
+    with MockPlatformInterfaceMixin
+    implements UrlLauncherPlatform {
+  final launches = <({String url, LaunchOptions options})>[];
+
+  @override
+  Future<bool> launchUrl(String url, LaunchOptions options) async {
+    launches.add((url: url, options: options));
+    return true;
+  }
+}
 
 void main() {
   late StreamController<Map<String, dynamic>> events;
@@ -19,6 +34,29 @@ void main() {
     ownershipRefreshes = 0;
   });
   tearDown(() => events.close());
+
+  test(
+    'iOS Support uses an external browser rather than in-app Safari',
+    () async {
+      final original = UrlLauncherPlatform.instance;
+      final launcher = _RecordingUrlLauncher();
+      UrlLauncherPlatform.instance = launcher;
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() {
+        UrlLauncherPlatform.instance = original;
+        debugDefaultTargetPlatformOverride = null;
+      });
+      await openShotUploadSupport();
+      expect(
+        launcher.launches.single.url,
+        'https://decentespresso.com/support/',
+      );
+      expect(
+        launcher.launches.single.options.mode,
+        PreferredLaunchMode.externalApplication,
+      );
+    },
+  );
 
   Future<void> mount(
     WidgetTester tester, {

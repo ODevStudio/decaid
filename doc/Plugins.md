@@ -249,6 +249,10 @@ An upstream HTTP 401 remains a response with `status: 401`.
 Only a 401 for unchanged credentials and authentication generation invalidates
 the host account. A late response cannot invalidate a newer login, even when
 that login uses the same stored credentials.
+The generation is captured with the final post-consent credential snapshot;
+account changes during that snapshot or an unfinished login abort before sending.
+Failure to reread credentials after an upstream 401 suppresses invalidation but
+does not replace the upstream response with a storage exception.
 
 The optional `gzip` boolean lets a plugin request host-side compression for its
 POST body. It defaults to false; omitting it or passing false forwards the body
@@ -1578,6 +1582,8 @@ The plugin's status adds `pausedSerials` and `authenticationPaused`; its
 `uploadPaused` event carries `{reason, serialNumber, message, timestamp}` with
 reason `unlinked_serial` or `authentication` and a null serial for authentication.
 Decaid displays a native notice with a Support or Sign In action.
+Support opens the external browser, including on iOS, so returning to Decaid
+produces an application-resume event rather than dismissing in-app Safari.
 Upload pause notices replace the snackbar queue so persistent update banners
 cannot hide the required account action. Returning from
 the support page invalidates uploader ownership before refreshing registered
@@ -1587,6 +1593,11 @@ during active work trigger immediate reconciliation from the beginning.
 Startup or `decentAccountChanged`
 triggers a new ownership check; only confirmed linked serials resume. Existing
 bundled plugin pins remain unchanged until a verified release is available.
+Account changes clear old serial pauses and notification deduplication before
+the new lookup. Nonempty `withskus=1` responses must contain serial-plus-SKU rows.
+Pending replacement scans have an independent five-entry budget and runtime
+continuation; known paused shots skip full-record reloads until account refresh.
+An authentication pause stops replacement and normal backlog scans immediately.
 
 ## Next Steps
 

@@ -46,7 +46,6 @@ import 'package:reaprime/src/models/device/scale.dart';
 import 'package:reaprime/src/plugins/plugin_loader_service.dart';
 import 'package:reaprime/src/plugins/plugin_source_service.dart';
 import 'package:reaprime/src/plugins/shot_upload_notifications.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:reaprime/src/debug_feature/scale_debug_view.dart';
 import 'package:reaprime/src/services/storage/bean_storage_service.dart';
 import 'package:reaprime/src/services/storage/grinder_storage_service.dart';
@@ -312,19 +311,7 @@ class _MyAppState extends State<MyApp> {
               events: widget.pluginLoaderService.pluginManager.emitStream,
               onSignIn: () => NavigationService.navigatorKey.currentState
                   ?.pushNamed(AccountPage.routeName),
-              onSupport: () async {
-                try {
-                  await launchUrl(
-                    Uri.parse('https://decentespresso.com/support/'),
-                  );
-                } catch (error, stackTrace) {
-                  _log.warning(
-                    'Could not open Decent support',
-                    error,
-                    stackTrace,
-                  );
-                }
-              },
+              onSupport: openShotUploadSupport,
               refreshOwnership: () => widget.pluginLoaderService.pluginManager
                   .broadcastEvent('decentAccountChanged', const {}),
               refreshAccount:

@@ -124,18 +124,17 @@ void main() {
   });
 
   test(
-    'generation is captured before consent and an overlapping login',
+    'a login still writing credentials after consent blocks the request',
     () async {
       final consentStarted = Completer<void>();
       final grantConsent = Completer<bool>();
       final writeStarted = Completer<void>();
       final finishWrite = Completer<void>();
-      final requestStarted = Completer<void>();
-      final response = Completer<http.Response>();
+      var requests = 0;
       final service = proxy(
         (_) async {
-          requestStarted.complete();
-          return response.future;
+          requests++;
+          return http.Response('unauthorized', 401);
         },
         requireConsent: (_) {
           consentStarted.complete();
@@ -156,11 +155,13 @@ void main() {
       final login = account.login('user@example.com', 'password');
       await writeStarted.future;
       grantConsent.complete(true);
-      await requestStarted.future;
+      await expectLater(
+        pending,
+        throwsA(isA<DecentAccountAuthInvalidException>()),
+      );
       finishWrite.complete();
       expect(await login, isTrue);
-      response.complete(http.Response('unauthorized', 401));
-      expect((await pending).statusCode, 401);
+      expect(requests, 0);
       expect(await account.isAuthKnownInvalid(), isFalse);
     },
   );
@@ -216,6 +217,90 @@ void main() {
         ),
         throwsA(isA<DecentAccountAuthInvalidException>()),
       );
+    },
+  );
+
+  for (final email in ['new@example.com', 'user@example.com']) {
+    test(
+      '401 rejects the credentials committed during consent as $email',
+      () async {
+        final consentStarted = Completer<void>();
+        final consent = Completer<bool>();
+        final service = proxy(
+          (_) async => http.Response('unauthorized', 401),
+          requireConsent: (_) {
+            consentStarted.complete();
+            return consent.future;
+          },
+        );
+        final pending = service.proxyGet(
+          callerId: 'plugin:shot-upload',
+          path: 'support/api/sn',
+        );
+        await consentStarted.future;
+        expect(await account.login(email, 'password'), isTrue);
+        consent.complete(true);
+        expect((await pending).statusCode, 401);
+        expect(await account.isAuthKnownInvalid(), isTrue);
+      },
+    );
+  }
+
+  test(
+    'a login during the final credential read aborts before sending',
+    () async {
+      final readStarted = Completer<void>();
+      final finishRead = Completer<void>();
+      var requests = 0;
+      final service = proxy(
+        (_) async {
+          requests++;
+          return http.Response('ok', 200);
+        },
+        requireConsent: (_) async {
+          readHook = (key) async {
+            if (key != 'email') return;
+            readHook = null;
+            readStarted.complete();
+            await finishRead.future;
+          };
+          return true;
+        },
+      );
+      final pending = service.proxyGet(
+        callerId: 'plugin:shot-upload',
+        path: 'support/api/sn',
+      );
+      final result = expectLater(pending, throwsStateError);
+      await readStarted.future;
+      expect(await account.login('new@example.com', 'password'), isTrue);
+      finishRead.complete();
+      await result;
+      expect(requests, 0);
+      expect(await account.isAuthKnownInvalid(), isFalse);
+    },
+  );
+
+  test(
+    'credential reread failure preserves the upstream 401 response',
+    () async {
+      final service = proxy((_) async {
+        readHook = (_) async => throw StateError('secure storage unavailable');
+        return http.Response(
+          'unauthorized',
+          401,
+          headers: {'x-upstream': 'preserved'},
+        );
+      });
+      final response = await service.proxyGet(
+        callerId: 'plugin:shot-upload',
+        path: 'support/api/sn',
+      );
+      readHook = null;
+      expect(response.statusCode, 401);
+      expect(response.body, 'unauthorized');
+      expect(response.headers['x-upstream'], 'preserved');
+      expect(await account.isAuthKnownInvalid(), isFalse);
     },
   );
 }

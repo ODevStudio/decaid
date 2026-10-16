@@ -9,6 +9,7 @@ Related https://github.com/decentespresso/shot-upload/issues/2
 
 ## Verification
 
+- Review follow-up: all six supplied findings addressed; 68 Node tests, 258 focused native tests, and two native smoke checks passed. Analysis is clean; full suite is 4,970 passed, two skipped, and the same seven Windows baseline failures. See `review-fixes.md` for failing-before-fix evidence and scope. These fixes are follow-up commits for the same two draft PRs, not a release or bundle-pin update.
 - Isolated main-based branches on 2026-10-16: 59 Node tests and 14 focused Flutter regressions passed; host analysis found no issues and formatting changed no affected Dart files.
 - Isolated host full suite: 4,965 passed, two skipped, seven BigInt-related scale-test failures. All seven reproduce on unchanged main `b9f9d055` with the same Windows runtime (24 passed, seven failed in the two scale suites). No unrelated scale/runtime changes are included.
 

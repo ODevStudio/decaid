@@ -2,6 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+Future<void> openShotUploadSupport() async {
+  try {
+    await launchUrl(
+      Uri.parse('https://decentespresso.com/support/'),
+      mode: LaunchMode.externalApplication,
+    );
+  } catch (error, stackTrace) {
+    Logger(
+      'ShotUploadNotifications',
+    ).warning('Could not open Decent support', error, stackTrace);
+  }
+}
 
 class ShotUploadNotifications extends StatefulWidget {
   const ShotUploadNotifications({

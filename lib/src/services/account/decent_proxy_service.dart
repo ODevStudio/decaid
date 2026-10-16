@@ -55,6 +55,7 @@ class DecentProxyService {
   final String baseUrl;
   final void Function()? onAuthFailure;
   final Future<bool> Function()? isAuthKnownInvalid;
+  final int Function()? authenticationGeneration;
 
   final Set<String> allowedPrefixes;
 
@@ -80,6 +81,7 @@ class DecentProxyService {
     this.allowedPrefixes = const {'support/api/'},
     this.onAuthFailure,
     this.isAuthKnownInvalid,
+    this.authenticationGeneration,
   }) : _httpClient = httpClient,
        _store = credentialStore,
        _requireConsent = requireConsent;
@@ -95,6 +97,7 @@ class DecentProxyService {
     String? contentType,
     bool gzipBody = false,
   }) async {
+    final generation = authenticationGeneration?.call();
     final normalizedMethod = method.toUpperCase();
     if (normalizedMethod != 'GET' &&
         normalizedMethod != 'POST' &&
@@ -166,7 +169,11 @@ class DecentProxyService {
     final response = await _httpClient.send(outbound);
     final responseBody = await response.stream.toBytes();
 
-    if (response.statusCode == 401) {
+    if (response.statusCode == 401 &&
+        onAuthFailure != null &&
+        generation == authenticationGeneration?.call() &&
+        await _credentials() == credentials &&
+        generation == authenticationGeneration?.call()) {
       onAuthFailure?.call();
     }
 

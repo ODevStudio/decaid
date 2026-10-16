@@ -243,6 +243,13 @@ const upload = await host.decentProxy("support/api/shot_upload", {
 
 The returned object has `{ status, headers, body }`. Consent denial or non-decision rejects with `error.code === "account_consent_denied"`. `GET` (read) needs `proxy.decent_api`; `POST` (write) needs `proxy.decent_api.write` and a path on the write allowlist. Credentials are attached in Dart and never exposed to plugin JS.
 
+Missing or known-invalid stored credentials reject with
+`error.code === "account_authentication_required"` before any upstream request.
+An upstream HTTP 401 remains a response with `status: 401`.
+Only a 401 for unchanged credentials and authentication generation invalidates
+the host account. A late response cannot invalidate a newer login, even when
+that login uses the same stored credentials.
+
 The optional `gzip` boolean lets a plugin request host-side compression for its
 POST body. It defaults to false; omitting it or passing false forwards the body
 unchanged, even for shot-upload JSON. Invalid types reject the request before
@@ -303,6 +310,11 @@ Machine broadcasts require `events.machine`. Shot lifecycle broadcasts require
   ```
 
 - **`shutdown`**: Plugin is about to be unloaded
+- **`decentAccountChanged`**: The host account's authentication or registered
+  machines changed, or an explicit ownership refresh was requested. Payload is
+  `{}` and requires `proxy.decent_api`. Invalidate
+  account-derived caches and verify ownership before resuming uploads. The event
+  contains no account identifiers or credentials.
 - **`storageRead`**: Response to a storage read request
 
   ```javascript
@@ -1555,6 +1567,26 @@ plugin session; after restart one later idempotent retry is possible. In 0.2.1
 backlog reconciliation follows `AutoUpload`; the removed 0.2.0 `DrainHistory`
 setting no longer gates it. Consent denial or non-decision pauses reconciliation
 without a periodic retry.
+
+The upcoming shot-upload 0.2.4 plugin adds an account machine-list check before
+any shot POST. Missing serials and upload HTTP 403 responses pause only that
+serial, without creating a permanent shot rejection marker. HTTP 401 pauses the
+account and requests sign-in. Machine-list outages hold uploads with backoff;
+they do not produce an unlinked-machine notice. The shared guard covers live,
+backlog, replacement, and manual uploads and preserves original shot identity.
+The plugin's status adds `pausedSerials` and `authenticationPaused`; its
+`uploadPaused` event carries `{reason, serialNumber, message, timestamp}` with
+reason `unlinked_serial` or `authentication` and a null serial for authentication.
+Decaid displays a native notice with a Support or Sign In action.
+Upload pause notices replace the snackbar queue so persistent update banners
+cannot hide the required account action. Returning from
+the support page invalidates uploader ownership before refreshing registered
+machines, so the plugin's lookup/backoff can recover even if the host refresh
+fails. Stale account request failures cannot reapply pauses, and account changes
+during active work trigger immediate reconciliation from the beginning.
+Startup or `decentAccountChanged`
+triggers a new ownership check; only confirmed linked serials resume. Existing
+bundled plugin pins remain unchanged until a verified release is available.
 
 ## Next Steps
 

@@ -35,6 +35,7 @@ void main() {
             onLoad() { $onLoad },
             onEvent(event) {
               if (event.name === 'notificationAction') host.emit('action', event.payload);
+              if (event.name === 'notificationDismissed') host.emit('dismissed', event.payload);
             }
           };
         }
@@ -85,6 +86,9 @@ void main() {
   );
 
   test('dismiss and unload cannot clear another plugin notification', () async {
+    final events = <Map<String, dynamic>>[];
+    final subscription = manager.emitStream.listen(events.add);
+    addTearDown(subscription.cancel);
     await load('first', onLoad: 'host.notify($notice);');
     await load(
       'second',
@@ -94,6 +98,49 @@ void main() {
     await load('second', onLoad: 'host.notify($notice);');
     await manager.unloadPlugin('first');
     expect(manager.notifications.value.single.pluginId, 'second');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(events, isEmpty);
+  });
+
+  test(
+    'user dismissal is targeted and retired notices cannot dismiss a replacement',
+    () async {
+      final events = <Map<String, dynamic>>[];
+      final subscription = manager.emitStream.listen(events.add);
+      addTearDown(subscription.cancel);
+      await load('first', onLoad: 'host.notify($notice);');
+      await load('second', onLoad: 'host.notify($notice);');
+      final old = manager.notifications.value.first;
+      manager.notifications.dismissByUser(old);
+      manager.notifications.dismissByUser(old);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(events.single, {
+        'pluginId': 'first',
+        'event': 'dismissed',
+        'payload': {'id': 'condition'},
+      });
+      await manager.unloadPlugin('first');
+      await load('first', onLoad: 'host.notify($notice);');
+      manager.notifications.dismissByUser(old);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(events.length, 1);
+      expect(manager.notifications.value.map((notice) => notice.pluginId), [
+        'second',
+        'first',
+      ]);
+    },
+  );
+
+  test('dismissal events require notification permission', () async {
+    final events = <Map<String, dynamic>>[];
+    final subscription = manager.emitStream.listen(events.add);
+    addTearDown(subscription.cancel);
+    await load('denied', allowed: false);
+    manager.dispatchEvent('denied', 'notificationDismissed', {
+      'id': 'condition',
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(events, isEmpty);
   });
 
   test(

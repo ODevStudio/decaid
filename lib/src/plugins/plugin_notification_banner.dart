@@ -147,8 +147,7 @@ class _PluginNotificationBannerState extends State<PluginNotificationBanner>
             ),
             IconButton(
               tooltip: 'Dismiss notification from ${notice.pluginName}',
-              onPressed: () =>
-                  widget.center.dismiss(notice.pluginId, notice.id),
+              onPressed: () => widget.center.dismissByUser(notice),
               icon: const Icon(LucideIcons.x),
             ),
           ],

@@ -2596,7 +2596,8 @@ class PluginManager {
       'shotStored' || 'shotUpdated' => PluginPermissions.eventsShots,
       'workflowUpdated' => PluginPermissions.eventsWorkflow,
       'decentAccountChanged' => PluginPermissions.proxyDecentApi,
-      'notificationAction' => PluginPermissions.notifications,
+      'notificationAction' ||
+      'notificationDismissed' => PluginPermissions.notifications,
       _ => null,
     };
     if (permission != null && !_hasPermission(pluginId, permission)) return;
@@ -2635,6 +2636,16 @@ class PluginManager {
     switch (type) {
       case 'notification':
         final generation = _pluginGenerations[pluginId];
+        void dispatchNotificationEvent(
+          String name,
+          Map<String, dynamic> event,
+        ) {
+          if (_lifecycle == PluginManagerLifecycle.active &&
+              _pluginGenerations[pluginId] == generation) {
+            dispatchEvent(pluginId, name, event);
+          }
+        }
+
         notifications.show(
           pluginId: pluginId,
           pluginName: _plugins[pluginId]!.manifest.name,
@@ -2642,12 +2653,10 @@ class PluginManager {
           canOpenAccount: _plugins[pluginId]!.manifest.permissions.contains(
             PluginPermissions.proxyDecentApi,
           ),
-          onAction: (event) {
-            if (_lifecycle == PluginManagerLifecycle.active &&
-                _pluginGenerations[pluginId] == generation) {
-              dispatchEvent(pluginId, 'notificationAction', event);
-            }
-          },
+          onAction: (event) =>
+              dispatchNotificationEvent('notificationAction', event),
+          onDismissed: (event) =>
+              dispatchNotificationEvent('notificationDismissed', event),
         );
         break;
 

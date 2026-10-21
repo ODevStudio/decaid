@@ -19,7 +19,9 @@ class PluginNotification {
     required this.message,
     required this.action,
     required void Function(String) onAction,
-  }) : _onAction = onAction;
+    required VoidCallback onDismissed,
+  }) : _onAction = onAction,
+       _onDismissed = onDismissed;
 
   final String pluginId;
   final String pluginName;
@@ -27,6 +29,7 @@ class PluginNotification {
   final String message;
   final PluginNotificationAction? action;
   final void Function(String) _onAction;
+  final VoidCallback _onDismissed;
 
   void reportAction(String phase) => _onAction(phase);
 }
@@ -79,6 +82,7 @@ class PluginNotificationCenter extends ValueNotifier<List<PluginNotification>> {
     required dynamic payload,
     required bool canOpenAccount,
     required void Function(Map<String, dynamic>) onAction,
+    void Function(Map<String, dynamic>)? onDismissed,
   }) {
     if (payload is! Map) throw const FormatException('Invalid notification');
     final id = _text(payload['id'], 128);
@@ -103,6 +107,7 @@ class PluginNotificationCenter extends ValueNotifier<List<PluginNotification>> {
         if (action == null || !isCurrent(notice)) return;
         onAction({'id': id, 'actionId': action.id, 'phase': phase});
       },
+      onDismissed: () => onDismissed?.call({'id': id}),
     );
     value = List.unmodifiable(
       index < 0
@@ -115,6 +120,12 @@ class PluginNotificationCenter extends ValueNotifier<List<PluginNotification>> {
   }
 
   bool isCurrent(PluginNotification notice) => value.contains(notice);
+
+  void dismissByUser(PluginNotification notice) {
+    if (!isCurrent(notice)) return;
+    dismiss(notice.pluginId, notice.id);
+    notice._onDismissed();
+  }
 
   void dismiss(String pluginId, [String? id]) {
     value = List.unmodifiable(

@@ -4,10 +4,12 @@ import 'package:reaprime/src/plugins/plugin_notifications.dart';
 void main() {
   late PluginNotificationCenter center;
   final actions = <Map<String, dynamic>>[];
+  final dismissals = <String>[];
 
   setUp(() {
     center = PluginNotificationCenter();
     actions.clear();
+    dismissals.clear();
   });
   tearDown(() => center.dispose());
 
@@ -22,6 +24,7 @@ void main() {
       },
       canOpenAccount: true,
       onAction: actions.add,
+      onDismissed: (event) => dismissals.add('$plugin:${event['id']}'),
     );
   }
 
@@ -32,11 +35,30 @@ void main() {
     show('first', 'same');
     expect(center.value.map((notice) => notice.pluginId), ['first', 'second']);
     expect(center.isCurrent(old), isFalse);
+    center.dismissByUser(old);
+    expect(center.value.length, 2);
     center.dismiss('first', 'same');
     expect(center.value.single.pluginId, 'second');
     center.dismiss('second');
     expect(center.value, isEmpty);
+    expect(dismissals, isEmpty);
   });
+
+  test(
+    'user dismissal removes the notice before reporting once without an action',
+    () {
+      show('first', 'same');
+      show('second', 'same');
+      final notice = center.value.first;
+      center.addListener(() => expect(dismissals, isEmpty));
+      center.dismissByUser(notice);
+      expect(center.value.single.pluginId, 'second');
+      expect(dismissals, ['first:same']);
+      center.dismissByUser(notice);
+      expect(dismissals, ['first:same']);
+      expect(actions, isEmpty);
+    },
+  );
 
   test('queue limits do not evict existing plugin notifications', () {
     for (var plugin = 0; plugin < 5; plugin++) {

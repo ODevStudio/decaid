@@ -22,6 +22,13 @@ Action and application-return events target only the originating live plugin
 generation and current notification. Plugins choose what those events mean.
 The executable API and its bounds are documented in `doc/Plugins.md`.
 
+The native close button reports a targeted `notificationDismissed` event after
+removal. Programmatic removals stay silent. The uploader tracks an outstanding
+ownership notice separately from paused serials: closing a notice acknowledges
+it without allowing uploads, and a newly paused serial can then alert the user.
+Additional paused serials must not replace a still-current notice, because that
+would invalidate a pending Support browser-return callback.
+
 ## Consumer Policy
 
 Shot-upload checks each shot's original machine serial before POST. Missing

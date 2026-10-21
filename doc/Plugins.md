@@ -243,6 +243,14 @@ successful external launch and a subsequent leave/resume transition, provided th
 notification and plugin generation remain current. It is not evidence that an
 external task succeeded. The plugin decides whether to refresh or retry.
 
+Closing a notice with the native dismiss button delivers `notificationDismissed`
+only to its originating live plugin, with payload `{id}` and the `notifications`
+permission. The notice is removed and pending actions invalidated before this
+event is delivered once. No action is required. Programmatic dismissal,
+replacement, unload, and stale dismiss buttons do not emit this event. Dismissal
+acknowledges the notice, not the underlying condition; recovery policy remains
+with the plugin.
+
 Hosts that reject unknown manifest permissions cannot load a plugin declaring
 `notifications` until they support this contract. No new REST or WebSocket route
 is introduced.
@@ -366,6 +374,9 @@ Machine broadcasts require `events.machine`. Shot lifecycle broadcasts require
 - **`notificationAction`**: A host-approved notification action or browser-return
   event. Requires `notifications`; see `host.notify` for the targeted payload
   and lifecycle. No action event is broadcast to unrelated plugins.
+- **`notificationDismissed`**: The user closed a current native notice. Requires
+  `notifications`; payload `{id}` is delivered only to the originating plugin.
+  Programmatic removals and retired notices do not emit dismissal events.
 - **`decentAccountChanged`**: The host account's authentication or registered
   machines changed, or an explicit account refresh was requested. Payload is
   `{}` and requires `proxy.decent_api`. Invalidate account-derived caches and

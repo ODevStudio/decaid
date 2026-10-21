@@ -27,11 +27,13 @@ void main() {
   late PluginNotificationCenter center;
   late _Launcher launcher;
   final actions = <String>[];
+  final dismissals = <String>[];
   var accountOpens = 0;
 
   setUp(() {
     center = PluginNotificationCenter();
     actions.clear();
+    dismissals.clear();
     accountOpens = 0;
     launcher = _Launcher();
     final original = UrlLauncherPlatform.instance;
@@ -56,6 +58,7 @@ void main() {
       },
       canOpenAccount: true,
       onAction: (event) => actions.add('$plugin:${event['phase']}'),
+      onDismissed: (event) => dismissals.add('$plugin:${event['id']}'),
     );
   }
 
@@ -128,6 +131,7 @@ void main() {
     expect(find.text('first needs attention'), findsNothing);
     expect(find.text('second needs attention'), findsOneWidget);
     expect(find.text('Update available'), findsOneWidget);
+    expect(dismissals, ['first:condition']);
     await tester.tap(find.text('Install'));
     expect(originalAction, 1);
     await tester.pumpWidget(const SizedBox());
@@ -168,11 +172,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Help'));
     await tester.pump();
-    center.dismiss('first');
+    await tester.tap(find.byTooltip('Dismiss notification from Plugin first'));
+    await tester.pumpAndSettle();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
     expect(actions, ['first:activated']);
+    expect(dismissals, ['first:condition']);
     await tester.pumpWidget(const SizedBox());
   });
 

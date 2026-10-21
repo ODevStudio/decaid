@@ -132,6 +132,7 @@ A Decaid plugin consists of two required files:
   - `log`: Call `host.log`
   - `api`: Use plugin `fetch` and expose declared HTTP endpoints
   - `emit`: Call `host.emit`
+  - `notifications`: Show, update, and dismiss plugin-attributed native notices
   - `pluginStorage`: Call `host.storage`
   - `events.machine`: Receive `stateUpdate`
   - `events.shots`: Receive `shotStored` and `shotUpdated`
@@ -197,6 +198,54 @@ Log messages to the Flutter app's logger. Requires `log`.
 
 ### `host.emit(eventName, payload)`
 Emit events to the Flutter app. Requires `emit`.
+
+### `host.notify(notification)` / `host.dismissNotification(id?)`
+
+Requires `notifications`. Show or update a native notice using a plugin-local ID:
+
+```javascript
+host.notify({
+  id: "connection",
+  message: "The service needs your attention.",
+  action: {
+    id: "help",
+    label: "Help",
+    type: "openExternalUrl",
+    url: "https://example.com/help"
+  }
+});
+host.dismissNotification("connection");
+```
+
+`action` is optional. IDs are nonempty strings of at most 128 characters; messages
+are limited to 600, action labels to 40, and URLs to 2,048. Invalid payloads are
+ignored and logged. Missing permission throws `PluginPermissionError`; Dart also
+checks the permission and live caller generation before accepting bridge calls.
+
+Only two action types are supported: `openExternalUrl` opens an absolute HTTPS
+URL without embedded credentials in the external browser; `openDecentAccount`
+opens native account settings and additionally requires `proxy.decent_api`.
+Both require an explicit user tap. Plugins cannot supply native routes, custom
+URL schemes, executable callbacks, automatic actions, or UI priority. The host
+displays the plugin name/ID and external destination hostname alongside the copy.
+
+Notices use a separate scrollable banner, never the global snackbar queue. They
+remain until dismissed, replaced, or unloaded. At most five notices per plugin
+and twenty total are retained; excess new IDs are ignored without evicting
+existing notices. Updating an existing ID preserves its position. Omit the ID
+when dismissing to clear only the calling plugin's notices. Reload/unload removes
+that plugin's notices and invalidates pending actions.
+
+`notificationAction` is delivered only to the originating plugin, with payload
+`{id, actionId, phase}`. `activated` means the user invoked an action; `failed`
+reports an unsuccessful external launch. `returned` is delivered once after a
+successful external launch and a subsequent leave/resume transition, provided the
+notification and plugin generation remain current. It is not evidence that an
+external task succeeded. The plugin decides whether to refresh or retry.
+
+Hosts that reject unknown manifest permissions cannot load a plugin declaring
+`notifications` until they support this contract. No new REST or WebSocket route
+is introduced.
 
 ### `host.storage(command)`
 Interact with persistent storage. Requires `pluginStorage`. Commands:
@@ -314,10 +363,13 @@ Machine broadcasts require `events.machine`. Shot lifecycle broadcasts require
   ```
 
 - **`shutdown`**: Plugin is about to be unloaded
+- **`notificationAction`**: A host-approved notification action or browser-return
+  event. Requires `notifications`; see `host.notify` for the targeted payload
+  and lifecycle. No action event is broadcast to unrelated plugins.
 - **`decentAccountChanged`**: The host account's authentication or registered
-  machines changed, or an explicit ownership refresh was requested. Payload is
-  `{}` and requires `proxy.decent_api`. Invalidate
-  account-derived caches and verify ownership before resuming uploads. The event
+  machines changed, or an explicit account refresh was requested. Payload is
+  `{}` and requires `proxy.decent_api`. Invalidate account-derived caches and
+  refetch required data before retrying account operations. The event
   contains no account identifiers or credentials.
 - **`storageRead`**: Response to a storage read request
 
@@ -1572,32 +1624,11 @@ backlog reconciliation follows `AutoUpload`; the removed 0.2.0 `DrainHistory`
 setting no longer gates it. Consent denial or non-decision pauses reconciliation
 without a periodic retry.
 
-The upcoming shot-upload 0.2.4 plugin adds an account machine-list check before
-any shot POST. Missing serials and upload HTTP 403 responses pause only that
-serial, without creating a permanent shot rejection marker. HTTP 401 pauses the
-account and requests sign-in. Machine-list outages hold uploads with backoff;
-they do not produce an unlinked-machine notice. The shared guard covers live,
-backlog, replacement, and manual uploads and preserves original shot identity.
-The plugin's status adds `pausedSerials` and `authenticationPaused`; its
-`uploadPaused` event carries `{reason, serialNumber, message, timestamp}` with
-reason `unlinked_serial` or `authentication` and a null serial for authentication.
-Decaid displays a native notice with a Support or Sign In action.
-Support opens the external browser, including on iOS, so returning to Decaid
-produces an application-resume event rather than dismissing in-app Safari.
-Upload pause notices replace the snackbar queue so persistent update banners
-cannot hide the required account action. Returning from
-the support page invalidates uploader ownership before refreshing registered
-machines, so the plugin's lookup/backoff can recover even if the host refresh
-fails. Stale account request failures cannot reapply pauses, and account changes
-during active work trigger immediate reconciliation from the beginning.
-Startup or `decentAccountChanged`
-triggers a new ownership check; only confirmed linked serials resume. Existing
-bundled plugin pins remain unchanged until a verified release is available.
-Account changes clear old serial pauses and notification deduplication before
-the new lookup. Nonempty `withskus=1` responses must contain serial-plus-SKU rows.
-Pending replacement scans have an independent five-entry budget and runtime
-continuation; known paused shots skip full-record reloads until account refresh.
-An authentication pause stops replacement and normal backlog scans immediately.
+The companion ownership update uses `host.notify` for actionable pauses. Its
+messages, support destination, and recovery rules belong in the
+[plugin repository](https://github.com/decentespresso/shot-upload), not native
+UI. Existing bundled plugin pins remain unchanged until a verified release is
+available.
 
 ## Next Steps
 
